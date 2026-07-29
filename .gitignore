@@ -1,46 +1,12 @@
 ```
 # Dependencies
 node_modules/
-backend/node_modules/
-frontend/node_modules/
 
-# Environment variables
+# Editors
+.vscode/
+
+# Environment
 .env
 .env.local
 .env.*
-
-# Build outputs
-backend/dist/
-backend/build/
-frontend/dist/
-frontend/build/
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Logs
-*.log
-
-# Temporary files
-*.tmp
-*.temp
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# IDE specific
-.vscode/
-.idea/
-
-# Backend specific
-backend/package-lock.json
-backend/src/**/*.js.map
-
-# Frontend specific
-frontend/package-lock.json
-frontend/src/**/*.map
 ```

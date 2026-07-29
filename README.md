@@ -1,30 +1,50 @@
 # PairPad
 
-**Phase 2 Complete – Auth + Rooms working; realtime and execution next**
+**Phase 3 Complete – Real-time Collaboration Working**
 
-Real-time collaborative coding platform built with Node.js, React, and WebSockets.
+Real-time collaborative coding platform built with Node.js, Express, React, Socket.IO, and Monaco Editor.
 
-## Current Status (Phase 2)
+## Current Status (Phase 3 of 4)
 
-✅ **Implemented:**
-- JWT authentication (register, login, protected routes)
-- User management with bcrypt password hashing
-- Room lifecycle (create, join, view, leave, delete)
-- MongoDB models for Users, Rooms, and Messages
-- REST API endpoints for auth and rooms
-- React frontend with auth context and protected routes
-- Dashboard for room management
-- Room pages with member lists
+### ✅ Implemented Features
 
-🚧 **Coming in Phase 3:**
-- Real-time collaboration with Socket.IO
-- Monaco editor integration
-- Live code synchronization
+**Authentication & Authorization**
+- JWT-based authentication
+- User registration and login
+- Protected routes and API endpoints
 
-🚧 **Coming in Phase 4:**
-- Code execution via Judge0
-- Chat functionality
-- Advanced room features
+**Room Management**
+- Create rooms with unique invite codes
+- Join/leave rooms
+- View room members and details
+- Language selection (JavaScript, TypeScript, Python, Java, C++, C, Go, Rust)
+
+**Real-time Collaboration**
+- Live code synchronization using Socket.IO
+- Multiple users can edit simultaneously
+- Full document sync (MVP approach)
+- Connection status indicator
+
+**Presence System**
+- See who's online in your room
+- Real-time join/leave notifications
+- User list sidebar
+
+**In-Room Chat**
+- Send and receive messages in real-time
+- Message persistence in MongoDB
+- Chat history on room join
+
+**Code Editor**
+- Monaco Editor (same engine as VS Code)
+- Syntax highlighting for multiple languages
+- Dark theme optimized for coding
+
+### 🚧 Coming in Phase 4
+- Code execution via Judge0 API
+- Docker containerization
+- CI/CD pipeline
+- Enhanced conflict resolution (CRDT/OT)
 
 ## Prerequisites
 
@@ -33,19 +53,19 @@ Real-time collaborative coding platform built with Node.js, React, and WebSocket
 
 ## Installation
 
-### Backend
+### Backend Setup
 
 ```bash
 cd backend
 npm install
 cp .env.example .env
-# Edit .env with your settings (MONGODB_URI, JWT_SECRET, etc.)
+# Edit .env with your settings (PORT, MONGODB_URI, JWT_SECRET, CLIENT_URL)
 npm run dev
 ```
 
 Server will start on `http://localhost:5000`
 
-### Frontend
+### Frontend Setup
 
 ```bash
 cd frontend
@@ -53,7 +73,47 @@ npm install
 npm run dev
 ```
 
-App will be available at `http://localhost:5173`
+Frontend will start on `http://localhost:5173`
+
+## Environment Variables
+
+See `.env.example` for required configuration:
+
+```
+PORT=5000
+NODE_ENV=development
+MONGODB_URI=mongodb://localhost:27017/pairpad
+JWT_SECRET=your_jwt_secret_here
+JWT_EXPIRES_IN=7d
+CLIENT_URL=http://localhost:5173
+```
+
+## Folder Structure
+
+```
+pairpad/
+├── backend/
+│   ├── src/
+│   │   ├── config/        # Database configuration
+│   │   ├── controllers/   # Request handlers
+│   │   ├── middleware/    # Auth middleware
+│   │   ├── models/        # Mongoose schemas (User, Room, Message)
+│   │   ├── routes/        # Express routers
+│   │   ├── sockets/       # Socket.IO handlers
+│   │   ├── utils/         # Helper functions
+│   │   └── server.js      # Main entry point
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── components/    # Reusable UI components
+│   │   ├── context/       # React context (Auth)
+│   │   ├── pages/         # Route pages (Login, Dashboard, Room)
+│   │   ├── services/      # API and Socket services
+│   │   ├── App.jsx        # Root component
+│   │   └── main.jsx       # Vite entry point
+│   └── package.json
+└── README.md
+```
 
 ## API Endpoints
 
@@ -65,51 +125,54 @@ App will be available at `http://localhost:5173`
 ### Rooms
 - `POST /api/rooms` - Create new room (protected)
 - `GET /api/rooms` - List user's rooms (protected)
-- `GET /api/rooms/:identifier` - Get room by ID or code (protected)
+- `GET /api/rooms/:roomCode` - Get room details (protected)
 - `POST /api/rooms/:roomCode/join` - Join a room (protected)
 - `POST /api/rooms/:roomCode/leave` - Leave a room (protected)
 - `DELETE /api/rooms/:roomCode` - Delete room (owner only, protected)
 
-## Folder Structure
+### Messages
+- `GET /api/messages/room/:roomCode` - Get room chat history (protected)
 
-```
-pairpad/
-├── backend/
-│   ├── src/
-│   │   ├── config/       # Database configuration
-│   │   ├── controllers/  # Route handlers
-│   │   ├── middleware/   # Auth middleware
-│   │   ├── models/       # Mongoose schemas
-│   │   ├── routes/       # Express routers
-│   │   ├── utils/        # Helper functions
-│   │   └── server.js     # Entry point
-│   ├── package.json
-│   └── .env.example
-├── frontend/
-│   ├── src/
-│   │   ├── context/      # Auth context
-│   │   ├── pages/        # Route components
-│   │   ├── routes/       # App routing
-│   │   ├── main.jsx      # Entry point
-│   │   └── index.css     # Global styles
-│   ├── package.json
-│   └── vite.config.js
-├── docs/
-└── README.md
-```
+## Socket.IO Events
 
-## Environment Variables
+### Client → Server
+- `join-room` - Join a room channel
+- `leave-room` - Leave current room
+- `code-change` - Broadcast code changes
+- `cursor-update` - Share cursor position
+- `chat-message` - Send chat message
 
-See `.env.example` in the backend directory for required variables:
-- `PORT` - Server port (default: 5000)
-- `MONGODB_URI` - MongoDB connection string
-- `JWT_SECRET` - Secret for JWT signing
-- `JWT_EXPIRES_IN` - Token expiration (default: 1d)
-- `CLIENT_URL` - Frontend URL for CORS
+### Server → Client
+- `presence-update` - Updated list of online users
+- `user-joined` - Notification when user joins
+- `user-left` - Notification when user leaves
+- `code-change` - Receive code changes from others
+- `cursor-update` - Receive cursor updates
+- `chat-message` - Receive chat messages
 
-## Development Commands
+## Limitations (MVP)
 
-- Backend: `cd backend && npm run dev`
-- Frontend: `cd frontend && npm run dev`
-- Backend production: `cd backend && npm start`
-- Frontend build: `cd frontend && npm run build`
+- **Conflict Resolution**: Uses simple last-write-wins. Simultaneous edits may cause conflicts. Future: implement CRDT or Operational Transforms.
+- **Single Instance**: Socket.IO presence is not shared across multiple server instances. Future: use Redis adapter.
+- **No Cursor Colors**: All cursors appear the same. Future: assign unique colors per user.
+
+## Tech Stack
+
+**Backend**
+- Node.js + Express
+- Socket.IO
+- MongoDB + Mongoose
+- JWT for authentication
+- bcryptjs for password hashing
+
+**Frontend**
+- React 18
+- Vite
+- React Router
+- Axios
+- Socket.IO Client
+- Monaco Editor
+
+## License
+
+MIT

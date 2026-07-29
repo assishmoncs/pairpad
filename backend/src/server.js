@@ -10,7 +10,10 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const executeRoutes = require('./routes/executeRoutes');
 const initializeSocket = require('./sockets/socketHandler');
+const { apiLimiter, authLimiter, executeLimiter } = require('./middleware/rateLimiter');
+const { notFoundMiddleware, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,17 +23,27 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 
 // Parse JSON bodies
-app.use(express.json());
+app.use(express.json({ limit: '1mb' })); // Limit body size
 
-// Health check route
+// Health check route (no rate limiting)
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'pairpad-backend' });
 });
 
-// Mount API routes
-app.use('/api/auth', authRoutes);
+// Mount API routes with rate limiting
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/execute', executeLimiter, executeRoutes);
+
+// Apply general API rate limiter to remaining routes
+app.use('/api', apiLimiter);
+
+// 404 handler for undefined routes
+app.use(notFoundMiddleware);
+
+// Global error handler (must be last)
+app.use(errorHandler);
 
 // Create HTTP server from Express app
 const server = http.createServer(app);
@@ -42,6 +55,9 @@ const io = new Server(server, {
     credentials: true,
   },
 });
+
+// Store io instance for access in routes
+app.set('io', io);
 
 // Attach Socket.IO handler
 initializeSocket(io);

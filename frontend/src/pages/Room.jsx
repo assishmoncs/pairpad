@@ -26,6 +26,11 @@ const Room = () => {
   const [language, setLanguage] = useState('javascript');
   const [isSaving, setIsSaving] = useState(false);
   const editorRef = useRef(null);
+
+  // Code execution state
+  const [executing, setExecuting] = useState(false);
+  const [executionResult, setExecutionResult] = useState(null);
+  const [executionError, setExecutionError] = useState('');
   
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -213,6 +218,50 @@ const Room = () => {
     }
   };
 
+  const handleRunCode = async () => {
+    setExecuting(true);
+    setExecutionResult(null);
+    setExecutionError('');
+
+    try {
+      const response = await axios.post('/api/execute', {
+        source_code: code,
+        language: language,
+        roomCode: roomCode,
+      });
+
+      const result = response.data.data.result;
+      setExecutionResult(result);
+
+      // If there is an error in execution, show it
+      if (result.status !== 'success' && result.stderr) {
+        setExecutionError(result.stderr);
+      }
+    } catch (error) {
+      console.error('[Room] Failed to execute code:', error);
+      setExecutionError(error.response?.data?.message || 'Failed to execute code.');
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  // Listen for code execution results from other users
+  useEffect(() => {
+    if (!connected) return;
+
+    const unsubExecutionResult = socketService.on('code-execution-result', ({ result, executedByName }) => {
+      console.log('[Room] Code execution result from:', executedByName);
+      setExecutionResult(result);
+      if (result.status !== 'success' && result.stderr) {
+        setExecutionError(result.stderr);
+      }
+    });
+
+    return () => {
+      unsubExecutionResult();
+    };
+  }, [connected]);
+
   if (loading) {
     return <div className="room-page loading">Loading room...</div>;
   }
@@ -267,6 +316,9 @@ const Room = () => {
               </select>
             </div>
             {isSaving && <span className="saving-indicator">Syncing...</span>}
+            <button onClick={handleRunCode} disabled={executing} className="btn-run">
+              {executing ? 'Running...' : '▶ Run Code'}
+            </button>
           </div>
           
           <Editor
@@ -301,6 +353,40 @@ const Room = () => {
                 <li className="no-users">No other users online</li>
               )}
             </ul>
+          </div>
+
+          {/* Execution Output */}
+          <div className="sidebar-section execution-section">
+            <h3>Execution Output</h3>
+            {executionError && (
+              <div className="execution-error">
+                <strong>Error:</strong> {executionError}
+              </div>
+            )}
+            {executionResult && (
+              <div className="execution-result">
+                {executionResult.stdout && (
+                  <div className="output-section">
+                    <strong>Output:</strong>
+                    <pre>{executionResult.stdout}</pre>
+                  </div>
+                )}
+                {executionResult.stderr && !executionError && (
+                  <div className="error-section">
+                    <strong>Stderr:</strong>
+                    <pre>{executionResult.stderr}</pre>
+                  </div>
+                )}
+                <div className="execution-meta">
+                  {executionResult.time && <span>Time: {executionResult.time}</span>}
+                  {executionResult.memory && <span>Memory: {executionResult.memory}</span>}
+                  <span>Status: {executionResult.status}</span>
+                </div>
+              </div>
+            )}
+            {!executionResult && !executionError && (
+              <p className="no-output">Click "Run Code" to see output</p>
+            )}
           </div>
 
           {/* Chat */}

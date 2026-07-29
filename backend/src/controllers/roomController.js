@@ -1,14 +1,28 @@
+const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Room = require('../models/Room');
 const User = require('../models/User');
+const { validateRoomName, sanitizeString } = require('../utils/validation');
 
-// Generate a random 6-character room code
+const ROOM_CODE_LENGTH = 6;
+const ROOM_CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+// Room codes double as invite tokens, so they must be unpredictable
 const generateRoomCode = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
+    code += ROOM_CODE_ALPHABET.charAt(
+      crypto.randomInt(ROOM_CODE_ALPHABET.length)
+    );
   }
   return code;
+};
+
+// Room codes are user-supplied path params; only accept the canonical format
+const normalizeRoomCode = (roomCode) => {
+  if (typeof roomCode !== 'string') return null;
+  const normalized = roomCode.trim().toUpperCase();
+  return /^[A-Z0-9]{6}$/.test(normalized) ? normalized : null;
 };
 
 // @desc    Create a new room
@@ -18,11 +32,17 @@ const createRoom = async (req, res) => {
   try {
     const { name, language, description } = req.body;
 
-    // Validate required fields
-    if (!name || !name.trim()) {
-      return res.status(400).json({ 
-        message: 'Room name is required.' 
-      });
+    const nameCheck = validateRoomName(name);
+    if (!nameCheck.valid) {
+      return res.status(400).json({ message: nameCheck.error });
+    }
+
+    if (language !== undefined && typeof language !== 'string') {
+      return res.status(400).json({ message: 'Language must be a string.' });
+    }
+
+    if (description !== undefined && typeof description !== 'string') {
+      return res.status(400).json({ message: 'Description must be a string.' });
     }
 
     // Generate unique room code
@@ -36,12 +56,12 @@ const createRoom = async (req, res) => {
 
     // Create room with owner as first member
     const room = await Room.create({
-      name: name.trim(),
+      name: nameCheck.value,
       roomCode,
       owner: req.user._id,
       members: [req.user._id],
       language: language || 'javascript',
-      description: description?.trim() || '',
+      description: sanitizeString(description || '').substring(0, 200),
     });
 
     // Populate owner details
@@ -107,11 +127,15 @@ const getRoom = async (req, res) => {
     const { identifier } = req.params;
 
     // Try to find by roomCode first, then by _id
-    let room = await Room.findOne({ roomCode: identifier.toUpperCase() })
-      .populate('owner', 'name email')
-      .populate('members', 'name email');
+    const normalizedCode = normalizeRoomCode(identifier);
 
-    if (!room) {
+    let room = normalizedCode
+      ? await Room.findOne({ roomCode: normalizedCode })
+          .populate('owner', 'name email')
+          .populate('members', 'name email')
+      : null;
+
+    if (!room && mongoose.isValidObjectId(identifier)) {
       room = await Room.findById(identifier)
         .populate('owner', 'name email')
         .populate('members', 'name email');
@@ -160,11 +184,11 @@ const getRoom = async (req, res) => {
 // @access  Private
 const joinRoom = async (req, res) => {
   try {
-    const { roomCode } = req.params;
+    const normalizedCode = normalizeRoomCode(req.params.roomCode);
 
-    const room = await Room.findOne({ 
-      roomCode: roomCode.toUpperCase() 
-    });
+    const room = normalizedCode
+      ? await Room.findOne({ roomCode: normalizedCode })
+      : null;
 
     if (!room) {
       return res.status(404).json({ 
@@ -215,11 +239,11 @@ const joinRoom = async (req, res) => {
 // @access  Private
 const leaveRoom = async (req, res) => {
   try {
-    const { roomCode } = req.params;
+    const normalizedCode = normalizeRoomCode(req.params.roomCode);
 
-    const room = await Room.findOne({ 
-      roomCode: roomCode.toUpperCase() 
-    });
+    const room = normalizedCode
+      ? await Room.findOne({ roomCode: normalizedCode })
+      : null;
 
     if (!room) {
       return res.status(404).json({ 
@@ -256,11 +280,11 @@ const leaveRoom = async (req, res) => {
 // @access  Private
 const deleteRoom = async (req, res) => {
   try {
-    const { roomCode } = req.params;
+    const normalizedCode = normalizeRoomCode(req.params.roomCode);
 
-    const room = await Room.findOne({ 
-      roomCode: roomCode.toUpperCase() 
-    });
+    const room = normalizedCode
+      ? await Room.findOne({ roomCode: normalizedCode })
+      : null;
 
     if (!room) {
       return res.status(404).json({ 

@@ -2,6 +2,7 @@
 
 const judge0Service = require('../services/judge0Service');
 const Room = require('../models/Room');
+const { validateSourceCode } = require('../utils/validation');
 
 /**
  * POST /api/execute
@@ -15,6 +16,11 @@ const executeCode = async (req, res) => {
       return res.status(400).json({
         message: 'Source code is required and must be a string.',
       });
+    }
+
+    const sourceCodeCheck = validateSourceCode(source_code);
+    if (!sourceCodeCheck.valid) {
+      return res.status(400).json({ message: sourceCodeCheck.error });
     }
 
     if (!language || typeof language !== 'string') {
@@ -42,7 +48,20 @@ const executeCode = async (req, res) => {
       });
     }
 
-    const normalizedCode = roomCode.toUpperCase().trim();
+    if (stdin !== undefined && stdin.length > 10000) {
+      return res.status(400).json({
+        message: 'Stdin must not exceed 10000 characters.',
+      });
+    }
+
+    const normalizedCode = roomCode.trim().toUpperCase();
+
+    if (!/^[A-Z0-9]{6}$/.test(normalizedCode)) {
+      return res.status(400).json({
+        message: 'Invalid room code.',
+      });
+    }
+
     const room = await Room.findOne({ roomCode: normalizedCode });
 
     if (!room) {
@@ -107,7 +126,6 @@ const executeCode = async (req, res) => {
 
     res.status(500).json({
       message: 'Failed to execute code.',
-      error: error.message,
     });
   }
 };

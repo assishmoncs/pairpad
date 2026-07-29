@@ -1,5 +1,10 @@
 const User = require('../models/User');
 const generateToken = require('../utils/generateToken');
+const {
+  sanitizeString,
+  isValidEmail,
+  validatePassword,
+} = require('../utils/validation');
 
 /** Format user object for API responses (never include password). */
 const formatUser = (user) => ({
@@ -16,13 +21,33 @@ const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    if (!name || !email || !password) {
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       return res.status(400).json({
         message: 'Please provide all required fields: name, email, and password.',
       });
     }
 
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({
+        message: 'Please provide a valid email address.',
+      });
+    }
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.valid) {
+      return res.status(400).json({ message: passwordCheck.error });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(409).json({
         message: 'An account with this email already exists.',
@@ -30,8 +55,8 @@ const register = async (req, res) => {
     }
 
     const user = await User.create({
-      name,
-      email,
+      name: sanitizeString(name).substring(0, 50),
+      email: normalizedEmail,
       password,
     });
 
@@ -69,13 +94,20 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      !password
+    ) {
       return res.status(400).json({
         message: 'Please provide both email and password.',
       });
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+    }).select('+password');
 
     if (!user) {
       return res.status(401).json({

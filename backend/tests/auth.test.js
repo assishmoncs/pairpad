@@ -1,22 +1,18 @@
-// Basic test for authentication endpoints
+// Basic tests for authentication endpoints
 const request = require('supertest');
 
-// Mock the database and server
 describe('Authentication Endpoints', () => {
   let app;
   let authToken;
 
   beforeAll(async () => {
-    // Set test environment
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = 'test_jwt_secret_for_testing_only';
-    
-    // Import app after env is set
+
     app = require('../src/server');
   });
 
   afterAll(async () => {
-    // Clean up
     if (app && app.close) {
       app.close();
     }
@@ -36,7 +32,9 @@ describe('Authentication Endpoints', () => {
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('token');
       expect(response.body.data).toHaveProperty('user');
+      expect(response.body.data).toHaveProperty('token');
       expect(response.body.data.user.email).toBe(testEmail);
+      expect(response.body.data.user._id).toBeDefined();
       expect(response.body.data.user.password).toBeUndefined();
     });
 
@@ -70,7 +68,6 @@ describe('Authentication Endpoints', () => {
     let testUserEmail;
 
     beforeAll(async () => {
-      // Create a test user first
       testUserEmail = `login_test${Date.now()}@example.com`;
       await request(app)
         .post('/api/auth/register')
@@ -92,7 +89,8 @@ describe('Authentication Endpoints', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('token');
       expect(response.body.data).toHaveProperty('user');
-      
+      expect(response.body.data.user._id).toBeDefined();
+
       authToken = response.body.token;
     });
 
@@ -123,7 +121,6 @@ describe('Authentication Endpoints', () => {
     let testUserEmail;
 
     beforeAll(async () => {
-      // Create a test user and get token
       testUserEmail = `me_test${Date.now()}@example.com`;
       const registerResponse = await request(app)
         .post('/api/auth/register')
@@ -143,11 +140,11 @@ describe('Authentication Endpoints', () => {
       expect(response.status).toBe(200);
       expect(response.body.data).toHaveProperty('user');
       expect(response.body.data.user.email).toBe(testUserEmail);
+      expect(response.body.data.user._id).toBeDefined();
     });
 
     it('should reject request without token', async () => {
-      const response = await request(app)
-        .get('/api/auth/me');
+      const response = await request(app).get('/api/auth/me');
 
       expect(response.status).toBe(401);
     });

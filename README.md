@@ -1,71 +1,69 @@
 # PairPad
 
-**Phase 3 Complete – Real-time Collaboration Working**
+**Real-time collaborative coding** for pair programming, technical interviews, and shared code execution.
 
-Real-time collaborative coding platform built with Node.js, Express, React, Socket.IO, and Monaco Editor.
+PairPad combines a Monaco-based editor, Socket.IO collaboration, room chat, presence indicators, and optional Judge0-powered code runs—inspired by Google Docs–style editing and platforms like LeetCode / CodeSignal.
 
-## Current Status (Phase 3 of 4)
+---
 
-### ✅ Implemented Features
+## Features
 
-**Authentication & Authorization**
-- JWT-based authentication
-- User registration and login
-- Protected routes and API endpoints
+| Area | What works today |
+|------|------------------|
+| **Auth** | Register, login, JWT sessions, protected API routes |
+| **Rooms** | Create rooms with invite codes, join / leave / delete, multi-language labels |
+| **Live editing** | Monaco Editor + Socket.IO full-document sync |
+| **Presence** | Online users in the current room |
+| **Chat** | In-room messaging with MongoDB history |
+| **Run code** | Judge0 integration (JS, TS, Python, Java, C/C++, Go, Rust, and more) |
+| **Hardening** | Rate limits on auth & execute, CORS, centralized errors, basic auth tests |
 
-**Room Management**
-- Create rooms with unique invite codes
-- Join/leave rooms
-- View room members and details
-- Language selection (JavaScript, TypeScript, Python, Java, C++, C, Go, Rust)
+### Known MVP limits
 
-**Real-time Collaboration**
-- Live code synchronization using Socket.IO
-- Multiple users can edit simultaneously
-- Full document sync (MVP approach)
-- Connection status indicator
+- Concurrent edits use **last-write-wins** (not CRDT/OT yet).
+- Presence is **in-memory** (single server instance).
+- Editor content is **not** fully persisted to the room document on every keystroke.
 
-**Presence System**
-- See who's online in your room
-- Real-time join/leave notifications
-- User list sidebar
+---
 
-**In-Room Chat**
-- Send and receive messages in real-time
-- Message persistence in MongoDB
-- Chat history on room join
+## Tech stack
 
-**Code Editor**
-- Monaco Editor (same engine as VS Code)
-- Syntax highlighting for multiple languages
-- Dark theme optimized for coding
+**Frontend:** React 18, Vite, React Router, Axios, Socket.IO Client, Monaco Editor  
+**Backend:** Node.js, Express, Socket.IO, MongoDB (Mongoose), JWT, bcryptjs, express-rate-limit  
+**Execution:** Judge0 CE (RapidAPI or self-hosted)
 
-### 🚧 Coming in Phase 4
-- Code execution via Judge0 API
-- Docker containerization
-- CI/CD pipeline
-- Enhanced conflict resolution (CRDT/OT)
+---
 
 ## Prerequisites
 
-- Node.js 16+
-- MongoDB (local or cloud instance)
+- Node.js 18+
+- MongoDB (local or Atlas)
+- Optional: Judge0 API key for the **Run Code** button
 
-## Installation
+---
 
-### Backend Setup
+## Quick start
+
+### 1. Clone
+
+```bash
+git clone https://github.com/tsunade601/pairpad.git
+cd pairpad
+```
+
+### 2. Backend
 
 ```bash
 cd backend
 npm install
 cp .env.example .env
-# Edit .env with your settings (PORT, MONGODB_URI, JWT_SECRET, CLIENT_URL)
+# Edit .env — at least MONGODB_URI and JWT_SECRET
 npm run dev
 ```
 
-Server will start on `http://localhost:5000`
+API listens on `http://localhost:5000` (health: `GET /health`).
 
-### Frontend Setup
+### 3. Frontend
 
 ```bash
 cd frontend
@@ -73,106 +71,139 @@ npm install
 npm run dev
 ```
 
-Frontend will start on `http://localhost:5173`
+App runs on `http://localhost:5173` (Vite proxies `/api` to the backend).
 
-## Environment Variables
+### Environment variables
 
-See `.env.example` for required configuration:
+Copy from `backend/.env.example`:
 
-```
-PORT=5000
-NODE_ENV=development
-MONGODB_URI=mongodb://localhost:27017/pairpad
-JWT_SECRET=your_jwt_secret_here
-JWT_EXPIRES_IN=7d
-CLIENT_URL=http://localhost:5173
-```
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | Backend port (default `5000`) |
+| `MONGODB_URI` | MongoDB connection string |
+| `JWT_SECRET` | Secret for signing tokens |
+| `JWT_EXPIRES_IN` | Token lifetime (e.g. `7d`) |
+| `CLIENT_URL` | Frontend origin for CORS / Socket.IO |
+| `JUDGE0_BASE_URL` | Judge0 API base URL |
+| `JUDGE0_API_KEY` | Judge0 / RapidAPI key |
+| `JUDGE0_RAPIDAPI_HOST` | RapidAPI host header |
 
-## Folder Structure
+Without a Judge0 key, auth, rooms, live editing, and chat still work; execution returns a clear configuration error.
 
-```
+---
+
+## Project structure
+
+```text
 pairpad/
 ├── backend/
 │   ├── src/
-│   │   ├── config/        # Database configuration
-│   │   ├── controllers/   # Request handlers
-│   │   ├── middleware/    # Auth middleware
-│   │   ├── models/        # Mongoose schemas (User, Room, Message)
-│   │   ├── routes/        # Express routers
-│   │   ├── sockets/       # Socket.IO handlers
-│   │   ├── utils/         # Helper functions
-│   │   └── server.js      # Main entry point
+│   │   ├── config/          # DB connection
+│   │   ├── controllers/     # Auth, rooms, execute
+│   │   ├── middleware/      # Auth, rate limit, errors
+│   │   ├── models/          # User, Room, Message
+│   │   ├── routes/
+│   │   ├── services/        # Judge0 client
+│   │   ├── sockets/         # Socket.IO collaboration
+│   │   ├── utils/
+│   │   └── server.js
+│   ├── tests/
+│   ├── .env.example
 │   └── package.json
 ├── frontend/
 │   ├── src/
-│   │   ├── components/    # Reusable UI components
-│   │   ├── context/       # React context (Auth)
-│   │   ├── pages/         # Route pages (Login, Dashboard, Room)
-│   │   ├── services/      # API and Socket services
-│   │   ├── App.jsx        # Root component
-│   │   └── main.jsx       # Vite entry point
+│   │   ├── context/         # AuthProvider
+│   │   ├── pages/           # Login, Register, Dashboard, Room
+│   │   ├── routes/
+│   │   ├── services/        # Socket client
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── index.html
 │   └── package.json
-└── README.md
+├── docs/
+│   └── system-design.md
+├── README.md
+└── LICENSE
 ```
 
-## API Endpoints
+---
 
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login user
-- `GET /api/auth/me` - Get current user (protected)
+## API overview
+
+### Auth
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/auth/register` | No | Create account |
+| `POST` | `/api/auth/login` | No | Login |
+| `GET` | `/api/auth/me` | Yes | Current user |
 
 ### Rooms
-- `POST /api/rooms` - Create new room (protected)
-- `GET /api/rooms` - List user's rooms (protected)
-- `GET /api/rooms/:roomCode` - Get room details (protected)
-- `POST /api/rooms/:roomCode/join` - Join a room (protected)
-- `POST /api/rooms/:roomCode/leave` - Leave a room (protected)
-- `DELETE /api/rooms/:roomCode` - Delete room (owner only, protected)
 
-### Messages
-- `GET /api/messages/room/:roomCode` - Get room chat history (protected)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/rooms` | Yes | Create room |
+| `GET` | `/api/rooms` | Yes | List my rooms |
+| `GET` | `/api/rooms/:identifier` | Yes | Room by code or id |
+| `POST` | `/api/rooms/:roomCode/join` | Yes | Join room |
+| `POST` | `/api/rooms/:roomCode/leave` | Yes | Leave room |
+| `DELETE` | `/api/rooms/:roomCode` | Yes | Delete (owner) |
 
-## Socket.IO Events
+### Messages & execution
 
-### Client → Server
-- `join-room` - Join a room channel
-- `leave-room` - Leave current room
-- `code-change` - Broadcast code changes
-- `cursor-update` - Share cursor position
-- `chat-message` - Send chat message
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/messages/room/:roomCode` | Yes | Chat history |
+| `POST` | `/api/execute` | Yes | Run code via Judge0 |
 
-### Server → Client
-- `presence-update` - Updated list of online users
-- `user-joined` - Notification when user joins
-- `user-left` - Notification when user leaves
-- `code-change` - Receive code changes from others
-- `cursor-update` - Receive cursor updates
-- `chat-message` - Receive chat messages
+---
 
-## Limitations (MVP)
+## Socket.IO events
 
-- **Conflict Resolution**: Uses simple last-write-wins. Simultaneous edits may cause conflicts. Future: implement CRDT or Operational Transforms.
-- **Single Instance**: Socket.IO presence is not shared across multiple server instances. Future: use Redis adapter.
-- **No Cursor Colors**: All cursors appear the same. Future: assign unique colors per user.
+Connections must send a JWT (`handshake.auth.token` or query `token`).
 
-## Tech Stack
+**Client → server:** `join-room`, `leave-room`, `code-change`, `cursor-update`, `chat-message`  
+**Server → client:** `presence-update`, `user-joined`, `user-left`, `code-change`, `cursor-update`, `chat-message`, `code-execution-result`
 
-**Backend**
-- Node.js + Express
-- Socket.IO
-- MongoDB + Mongoose
-- JWT for authentication
-- bcryptjs for password hashing
+Details: [docs/system-design.md](./docs/system-design.md).
 
-**Frontend**
-- React 18
-- Vite
-- React Router
-- Axios
-- Socket.IO Client
-- Monaco Editor
+---
+
+## Scripts
+
+```bash
+# Backend
+cd backend && npm run dev      # nodemon
+cd backend && npm start        # production-style start
+cd backend && npm test         # Jest auth tests
+
+# Frontend
+cd frontend && npm run dev
+cd frontend && npm run build
+cd frontend && npm run preview
+```
+
+---
+
+## Roadmap
+
+- [ ] CRDT / OT conflict-safe editing
+- [ ] Persist editor snapshots on the room
+- [ ] Role-based permissions (owner / editor / viewer)
+- [ ] Redis adapter for multi-instance Socket.IO
+- [ ] Docker Compose + CI
+- [ ] Interview mode (timer, templates, test cases)
+
+---
+
+## Contributing
+
+1. Fork the repo and create a feature branch.
+2. Keep changes focused; add or update tests when touching auth or APIs.
+3. Open a pull request with a clear description of what and why.
+
+---
 
 ## License
 
-MIT
+MIT © See [LICENSE](./LICENSE).

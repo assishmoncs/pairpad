@@ -1,75 +1,49 @@
-```
 # Dependencies
 node_modules/
 
-# Logs and temp files
+# Logs
+logs/
 *.log
-*.tmp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Environment
 .env
-.env.local
-*.env.*
+.env.*
+!.env.example
 
-# Editors
-.vscode/
-.idea/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git/
-.mypy_cache/
-.pytest_cache/
-.hypothesis/
-
-# Build artifacts
+# Build output
 dist/
 build/
-*.egg-info/
-.eggs/
+coverage/
+.vite/
+.eslintcache
+.cache/
 
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+# Runtime
+pids/
+*.pid
+*.pid.lock
 
-# System files
+# MongoDB local files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDEs and editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS files
 .DS_Store
 Thumbs.db
-```
+
+# Temporary files
+tmp/
+temp/

@@ -201,7 +201,7 @@ describe('executeCode error mapping', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
-      message: 'Failed to execute code.',
+      message: 'Failed to execute code. Please try again.',
     });
   });
 });

@@ -127,6 +127,10 @@ const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
+    if (!user) {
+      return sendError(res, 404, 'User not found.');
+    }
+
     sendSuccess(res, 'User retrieved successfully.', { user: formatUser(user) });
   } catch (error) {
     console.error('Get me error:', error.message);

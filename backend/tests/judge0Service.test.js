@@ -52,10 +52,10 @@ describe('getLanguageId', () => {
     expect(getLanguageId('TypeScript')).toBe(LANGUAGE_MAP.typescript);
   });
 
-  it('falls back to javascript for unknown languages', () => {
-    const { getLanguageId, LANGUAGE_MAP } = loadService();
+  it('throws for unknown languages instead of silently defaulting', () => {
+    const { getLanguageId } = loadService();
 
-    expect(getLanguageId('cobol')).toBe(LANGUAGE_MAP.javascript);
+    expect(() => getLanguageId('cobol')).toThrow(/Unsupported language: cobol/);
   });
 });
 

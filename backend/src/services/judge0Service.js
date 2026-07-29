@@ -38,10 +38,21 @@ const judge0RequestConfig = (extraHeaders = {}) => ({
 });
 
 /**
- * Get Judge0 language ID from our internal language name
+ * Get Judge0 language ID from our internal language name.
+ * Throws for unsupported languages instead of silently defaulting,
+ * so callers surface the invalid input rather than running the wrong runtime.
  */
 function getLanguageId(language) {
-  return LANGUAGE_MAP[language.toLowerCase()] || LANGUAGE_MAP.javascript;
+  if (typeof language !== 'string') {
+    throw new Error('Language must be a string.');
+  }
+
+  const languageId = LANGUAGE_MAP[language.toLowerCase()];
+  if (languageId === undefined) {
+    throw new Error(`Unsupported language: ${language}`);
+  }
+
+  return languageId;
 }
 
 /**

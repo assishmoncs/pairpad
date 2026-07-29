@@ -1,3 +1,5 @@
-# Components Placeholder
+# Frontend Components
 
-This folder will contain reusable UI components for editor, chat, and presence indicators.
+Reusable UI components (editor, chat, presence indicators).
+
+**Phase 1:** Not yet implemented.

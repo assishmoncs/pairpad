@@ -1,3 +1,5 @@
-# Hooks Placeholder
+# Frontend Hooks
 
-This folder will contain reusable React hooks for collaboration and app state.
+Reusable React hooks for collaboration and app state.
+
+**Phase 1:** Not yet implemented.

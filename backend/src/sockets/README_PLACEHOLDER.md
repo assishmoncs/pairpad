@@ -1,3 +1,5 @@
-# Sockets Placeholder
+# Backend Sockets
 
-This folder will host Socket.IO event registration and room collaboration handlers.
+Socket.IO event handlers for real-time collaboration.
+
+**Phase 1:** Not yet implemented.

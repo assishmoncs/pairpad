@@ -1,3 +1,5 @@
-# Pages Placeholder
+# Frontend Pages
 
-This folder will contain route-level pages such as landing, room, and auth views.
+Route-level pages (landing, room, auth views).
+
+**Phase 1:** Not yet implemented.

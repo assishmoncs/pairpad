@@ -1,3 +1,5 @@
-# Routes Placeholder
+# Backend Routes
 
-This folder will define Express route modules and map endpoints to controllers.
+Express route modules mapping endpoints to controllers.
+
+**Phase 1:** Only `/health` is implemented in `server.js`. Future routes will be added here.

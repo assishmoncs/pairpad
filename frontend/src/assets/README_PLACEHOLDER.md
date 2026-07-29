@@ -1,3 +1,5 @@
-# Assets Placeholder
+# Frontend Assets
 
-This folder will store static frontend assets such as icons, logos, and illustrations.
+Static assets (icons, logos, illustrations).
+
+**Phase 1:** Empty.

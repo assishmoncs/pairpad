@@ -1,3 +1,5 @@
-# Models Placeholder
+# Backend Models
 
-This folder will contain Mongoose schemas/models (users, rooms, messages, and submissions).
+Mongoose schemas and models (users, rooms, messages, submissions).
+
+**Phase 1:** Not yet implemented.

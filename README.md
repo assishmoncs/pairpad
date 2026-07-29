@@ -175,7 +175,8 @@ Details: [docs/system-design.md](./docs/system-design.md).
 # Backend
 cd backend && npm run dev      # nodemon
 cd backend && npm start        # production-style start
-cd backend && npm test         # Jest auth tests
+cd backend && npm test         # full Jest suite (auth endpoint tests need MongoDB)
+cd backend && npm run test:unit # unit tests only, no MongoDB required
 
 # Frontend
 cd frontend && npm run dev

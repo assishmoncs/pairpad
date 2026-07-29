@@ -1,6 +1,7 @@
 // Execute code controller — Judge0 API, auth + room membership required
 
 const judge0Service = require('../services/judge0Service');
+const { validateSourceCode } = require('../utils/validation');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const {
   findRoomByCode,
@@ -18,6 +19,11 @@ const executeCode = async (req, res) => {
 
     if (!source_code || typeof source_code !== 'string') {
       return sendError(res, 400, 'Source code is required and must be a string.');
+    }
+
+    const sourceCodeCheck = validateSourceCode(source_code);
+    if (!sourceCodeCheck.valid) {
+      return sendError(res, 400, sourceCodeCheck.error);
     }
 
     if (!language || typeof language !== 'string') {
@@ -39,6 +45,10 @@ const executeCode = async (req, res) => {
 
     if (stdin !== undefined && typeof stdin !== 'string') {
       return sendError(res, 400, 'Stdin must be a string.');
+    }
+
+    if (stdin !== undefined && stdin.length > 10000) {
+      return sendError(res, 400, 'Stdin must not exceed 10000 characters.');
     }
 
     const normalizedCode = normalizeRoomCode(roomCode);

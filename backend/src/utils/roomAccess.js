@@ -1,13 +1,23 @@
 // Shared room lookup, population and membership helpers.
 
+const crypto = require('crypto');
 const Room = require('../models/Room');
 
 const USER_FIELDS = 'name email';
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const ROOM_CODE_PATTERN = /^[A-Z0-9]{6}$/;
 
-/** Normalize a user supplied room code to its stored form. */
-const normalizeRoomCode = (roomCode) => roomCode.toUpperCase().trim();
+/**
+ * Normalize a user supplied room code to its stored form.
+ * Returns null for anything that is not a well formed code, so unvalidated
+ * input never reaches the database as a query value.
+ */
+const normalizeRoomCode = (roomCode) => {
+  if (typeof roomCode !== 'string') return null;
+  const normalized = roomCode.trim().toUpperCase();
+  return ROOM_CODE_PATTERN.test(normalized) ? normalized : null;
+};
 
 /** Populate owner and members with their public fields. */
 const populateRoom = (query) =>
@@ -19,7 +29,10 @@ const populateRoom = (query) =>
  * @param {{populate?: boolean}} [options]
  */
 const findRoomByCode = (roomCode, { populate = false } = {}) => {
-  const query = Room.findOne({ roomCode: normalizeRoomCode(roomCode) });
+  const normalized = normalizeRoomCode(roomCode);
+  if (!normalized) return Promise.resolve(null);
+
+  const query = Room.findOne({ roomCode: normalized });
   return populate ? populateRoom(query) : query;
 };
 
@@ -42,11 +55,11 @@ const isRoomParticipant = (room, userId) => {
   return room.members.some((member) => refId(member) === id) || refId(room.owner) === id;
 };
 
-/** Generate a random room code. */
+/** Generate a random room code. Codes double as invite tokens, so use a CSPRNG. */
 const generateRoomCode = () => {
   let code = '';
   for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
-    code += ROOM_CODE_CHARS.charAt(Math.floor(Math.random() * ROOM_CODE_CHARS.length));
+    code += ROOM_CODE_CHARS.charAt(crypto.randomInt(ROOM_CODE_CHARS.length));
   }
   return code;
 };

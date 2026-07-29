@@ -192,7 +192,7 @@ describe('executeCode error mapping', () => {
     expect(res.json).toHaveBeenCalledWith({ message });
   });
 
-  it('returns 500 for unexpected execution failures', async () => {
+  it('returns 500 for unexpected execution failures without leaking the cause', async () => {
     judge0Service.submitCode.mockRejectedValue(new Error('boom'));
     const req = createReq({}, { io: null, app: { get: () => null } });
     const res = createRes();

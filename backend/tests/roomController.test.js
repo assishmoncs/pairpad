@@ -4,6 +4,7 @@ jest.mock('../src/models/Room', () => ({
   findById: jest.fn(),
   create: jest.fn(),
   deleteOne: jest.fn(),
+  exists: jest.fn(),
 }));
 jest.mock('../src/models/User', () => ({}));
 
@@ -53,7 +54,7 @@ const populatedList = (rooms) => ({
 let consoleError;
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  jest.resetAllMocks();
   consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -68,12 +69,12 @@ describe('createRoom', () => {
     await createRoom(createReq({ body: { name: '   ' } }), res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ message: 'Room name is required.' });
+    expect(res.json).toHaveBeenCalledWith({ message: 'Room name cannot be empty.' });
     expect(Room.create).not.toHaveBeenCalled();
   });
 
   it('creates a room with a unique 6-character code and the owner as a member', async () => {
-    Room.findOne.mockResolvedValue(null);
+    Room.exists.mockResolvedValue(null);
     Room.create.mockResolvedValue({ _id: 'room-1' });
     const populatedRoom = { _id: 'room-1', name: 'My Room' };
     Room.findById.mockReturnValue(populated(populatedRoom));
@@ -101,7 +102,7 @@ describe('createRoom', () => {
   });
 
   it('defaults language to javascript and description to an empty string', async () => {
-    Room.findOne.mockResolvedValue(null);
+    Room.exists.mockResolvedValue(null);
     Room.create.mockResolvedValue({ _id: 'room-1' });
     Room.findById.mockReturnValue(populated({}));
 
@@ -113,7 +114,7 @@ describe('createRoom', () => {
   });
 
   it('regenerates the room code until an unused one is found', async () => {
-    Room.findOne
+    Room.exists
       .mockResolvedValueOnce({ _id: 'taken' })
       .mockResolvedValueOnce({ _id: 'taken' })
       .mockResolvedValueOnce(null);
@@ -122,12 +123,12 @@ describe('createRoom', () => {
 
     await createRoom(createReq({ body: { name: 'Room' } }), createRes());
 
-    expect(Room.findOne).toHaveBeenCalledTimes(3);
+    expect(Room.exists).toHaveBeenCalledTimes(3);
     expect(Room.create).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces Mongoose validation errors as 400', async () => {
-    Room.findOne.mockResolvedValue(null);
+    Room.exists.mockResolvedValue(null);
     const error = new Error('invalid');
     error.name = 'ValidationError';
     error.errors = { name: { message: 'Room name is required' } };
@@ -144,7 +145,7 @@ describe('createRoom', () => {
   });
 
   it('returns 500 on unexpected failures', async () => {
-    Room.findOne.mockRejectedValue(new Error('db down'));
+    Room.exists.mockRejectedValue(new Error('db down'));
     const res = createRes();
 
     await createRoom(createReq({ body: { name: 'Room' } }), res);
@@ -207,17 +208,28 @@ describe('getRoom', () => {
   });
 
   it('falls back to an id lookup when no room matches the code', async () => {
+    const roomId = '507f1f77bcf86cd799439011';
     const room = membership([USER_ID], OTHER_ID);
     Room.findOne.mockReturnValue(populated(null));
     Room.findById.mockReturnValue(populated(room));
     const res = createRes();
 
-    await getRoom(createReq({ params: { identifier: 'room-id' } }), res);
+    await getRoom(createReq({ params: { identifier: roomId } }), res);
 
-    expect(Room.findById).toHaveBeenCalledWith('room-id');
+    expect(Room.findById).toHaveBeenCalledWith(roomId);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ data: { room } })
     );
+  });
+
+  it('does not query by id for an identifier that is neither a room code nor an ObjectId', async () => {
+    const res = createRes();
+
+    await getRoom(createReq({ params: { identifier: 'not-a-room-id' } }), res);
+
+    expect(Room.findOne).not.toHaveBeenCalled();
+    expect(Room.findById).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(404);
   });
 
   it('returns 404 when neither lookup matches', async () => {
@@ -243,7 +255,7 @@ describe('getRoom', () => {
     });
   });
 
-  it('treats an invalid ObjectId as a 404', async () => {
+  it('treats a CastError as a 404', async () => {
     Room.findOne.mockReturnValue(populated(null));
     const castError = new Error('Cast to ObjectId failed');
     castError.name = 'CastError';
@@ -252,7 +264,7 @@ describe('getRoom', () => {
     });
     const res = createRes();
 
-    await getRoom(createReq({ params: { identifier: '!!!' } }), res);
+    await getRoom(createReq({ params: { identifier: '507f1f77bcf86cd799439011' } }), res);
 
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({ message: 'Room not found.' });

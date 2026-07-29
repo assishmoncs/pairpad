@@ -1,4 +1,6 @@
+const mongoose = require('mongoose');
 const Room = require('../models/Room');
+const { validateRoomName, sanitizeString } = require('../utils/validation');
 const { sendSuccess, sendError, sendValidationError } = require('../utils/apiResponse');
 const {
   findRoomByCode,
@@ -15,21 +17,29 @@ const createRoom = async (req, res) => {
   try {
     const { name, language, description } = req.body;
 
-    // Validate required fields
-    if (!name || !name.trim()) {
-      return sendError(res, 400, 'Room name is required.');
+    const nameCheck = validateRoomName(name);
+    if (!nameCheck.valid) {
+      return sendError(res, 400, nameCheck.error);
+    }
+
+    if (language !== undefined && typeof language !== 'string') {
+      return sendError(res, 400, 'Language must be a string.');
+    }
+
+    if (description !== undefined && typeof description !== 'string') {
+      return sendError(res, 400, 'Description must be a string.');
     }
 
     const roomCode = await generateUniqueRoomCode();
 
     // Create room with owner as first member
     const room = await Room.create({
-      name: name.trim(),
+      name: nameCheck.value,
       roomCode,
       owner: req.user._id,
       members: [req.user._id],
       language: language || 'javascript',
-      description: description?.trim() || '',
+      description: sanitizeString(description || '').substring(0, 200),
     });
 
     const populatedRoom = await findPopulatedRoomById(room._id);
@@ -73,7 +83,7 @@ const getRoom = async (req, res) => {
     // Try to find by roomCode first, then by _id
     let room = await findRoomByCode(identifier, { populate: true });
 
-    if (!room) {
+    if (!room && mongoose.isValidObjectId(identifier)) {
       room = await findPopulatedRoomById(identifier);
     }
 

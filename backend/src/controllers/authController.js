@@ -1,5 +1,10 @@
 const User = require('../models/User');
 const generateToken = require('../utils/generateToken');
+const {
+  sanitizeString,
+  isValidEmail,
+  validatePassword,
+} = require('../utils/validation');
 const { sendSuccess, sendError, sendValidationError } = require('../utils/apiResponse');
 
 /** Format user object for API responses (never include password). */
@@ -29,7 +34,14 @@ const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    if (!name || !email || !password) {
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       return sendError(
         res,
         400,
@@ -37,14 +49,25 @@ const register = async (req, res) => {
       );
     }
 
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!isValidEmail(normalizedEmail)) {
+      return sendError(res, 400, 'Please provide a valid email address.');
+    }
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.valid) {
+      return sendError(res, 400, passwordCheck.error);
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return sendError(res, 409, 'An account with this email already exists.');
     }
 
     const user = await User.create({
-      name,
-      email,
+      name: sanitizeString(name).substring(0, 50),
+      email: normalizedEmail,
       password,
     });
 
@@ -67,11 +90,18 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      !password
+    ) {
       return sendError(res, 400, 'Please provide both email and password.');
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+    }).select('+password');
 
     if (!user) {
       return sendError(res, 401, 'Invalid email or password.');

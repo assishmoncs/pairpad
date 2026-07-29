@@ -48,27 +48,23 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, [token]);
 
-  const login = async (email, password) => {
-    const response = await axios.post('/api/auth/login', { email, password });
+  // Persist the session returned by the auth endpoints
+  const authenticate = async (endpoint, payload) => {
+    const response = await axios.post(endpoint, payload);
     const { user: userData, token: authToken } = response.data.data;
-    
+
     localStorage.setItem('token', authToken);
     setToken(authToken);
     setUser(userData);
-    
+
     return response.data;
   };
 
-  const register = async (name, email, password) => {
-    const response = await axios.post('/api/auth/register', { name, email, password });
-    const { user: userData, token: authToken } = response.data.data;
-    
-    localStorage.setItem('token', authToken);
-    setToken(authToken);
-    setUser(userData);
-    
-    return response.data;
-  };
+  const login = (email, password) =>
+    authenticate('/api/auth/login', { email, password });
+
+  const register = (name, email, password) =>
+    authenticate('/api/auth/register', { name, email, password });
 
   const logout = () => {
     localStorage.removeItem('token');

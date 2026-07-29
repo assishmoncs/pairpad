@@ -5,6 +5,16 @@ import { io } from 'socket.io-client';
  * Manages Socket.IO connection, authentication, and room events.
  */
 
+// Server events forwarded as-is to subscribers of this service
+const FORWARDED_EVENTS = [
+  'presence-update',
+  'user-joined',
+  'user-left',
+  'code-change',
+  'cursor-update',
+  'chat-message',
+];
+
 class SocketService {
   constructor() {
     this.socket = null;
@@ -50,32 +60,11 @@ class SocketService {
       this.emitEvent('connect_error', { error: error.message });
     });
 
-    // Presence updates
-    this.socket.on('presence-update', (data) => {
-      this.emitEvent('presence-update', data);
-    });
-
-    this.socket.on('user-joined', (data) => {
-      this.emitEvent('user-joined', data);
-    });
-
-    this.socket.on('user-left', (data) => {
-      this.emitEvent('user-left', data);
-    });
-
-    // Code synchronization
-    this.socket.on('code-change', (data) => {
-      this.emitEvent('code-change', data);
-    });
-
-    // Cursor updates
-    this.socket.on('cursor-update', (data) => {
-      this.emitEvent('cursor-update', data);
-    });
-
-    // Chat messages
-    this.socket.on('chat-message', (data) => {
-      this.emitEvent('chat-message', data);
+    // Presence, code synchronization, cursor and chat events
+    FORWARDED_EVENTS.forEach((event) => {
+      this.socket.on(event, (data) => {
+        this.emitEvent(event, data);
+      });
     });
 
     return this.socket;
@@ -96,29 +85,50 @@ class SocketService {
   }
 
   /**
+   * Emit an event and resolve with the server acknowledgement.
+   * @param {string} event - Event name
+   * @param {object} payload - Event payload
+   * @param {{requirement: () => string|null}} [options] - Precondition producing an error message
+   * @returns {Promise<object>}
+   * @private
+   */
+  emitWithAck(event, payload, { requirement } = {}) {
+    return new Promise((resolve, reject) => {
+      const requirementError = requirement?.();
+      if (requirementError) {
+        return reject(new Error(requirementError));
+      }
+
+      this.socket?.emit(event, payload, (response) => {
+        if (response?.error) {
+          reject(new Error(response.error));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
+  /** Error message when the socket is not connected yet. */
+  requireConnection = () => (this.socket?.connected ? null : 'Not connected to server');
+
+  /** Error message when the socket has not joined a room yet. */
+  requireRoom = () => (this.currentRoom ? null : 'Not in a room');
+
+  /**
    * Join a room by room code
    * @param {string} roomCode - Room code to join
    * @returns {Promise}
    */
-  joinRoom(roomCode) {
-    return new Promise((resolve, reject) => {
-      if (!this.socket?.connected) {
-        return reject(new Error('Not connected to server'));
-      }
+  async joinRoom(roomCode) {
+    const response = await this.emitWithAck(
+      'join-room',
+      { roomCode },
+      { requirement: this.requireConnection }
+    );
 
-      this.socket.emit(
-        'join-room',
-        { roomCode },
-        (response) => {
-          if (response?.error) {
-            reject(new Error(response.error));
-          } else {
-            this.currentRoom = response.room?.roomCode || roomCode.toUpperCase();
-            resolve(response);
-          }
-        }
-      );
-    });
+    this.currentRoom = response.room?.roomCode || roomCode.toUpperCase();
+    return response;
   }
 
   /**
@@ -138,23 +148,11 @@ class SocketService {
    * @returns {Promise}
    */
   sendCodeChange(content, language) {
-    return new Promise((resolve, reject) => {
-      if (!this.currentRoom) {
-        return reject(new Error('Not in a room'));
-      }
-
-      this.socket?.emit(
-        'code-change',
-        { content, language },
-        (response) => {
-          if (response?.error) {
-            reject(new Error(response.error));
-          } else {
-            resolve(response);
-          }
-        }
-      );
-    });
+    return this.emitWithAck(
+      'code-change',
+      { content, language },
+      { requirement: this.requireRoom }
+    );
   }
 
   /**
@@ -174,23 +172,7 @@ class SocketService {
    * @returns {Promise}
    */
   sendChatMessage(content) {
-    return new Promise((resolve, reject) => {
-      if (!this.currentRoom) {
-        return reject(new Error('Not in a room'));
-      }
-
-      this.socket?.emit(
-        'chat-message',
-        { content },
-        (response) => {
-          if (response?.error) {
-            reject(new Error(response.error));
-          } else {
-            resolve(response);
-          }
-        }
-      );
-    });
+    return this.emitWithAck('chat-message', { content }, { requirement: this.requireRoom });
   }
 
   /**

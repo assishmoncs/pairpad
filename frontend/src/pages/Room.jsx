@@ -4,6 +4,9 @@ import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import socketService from '../services/socketService';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/apiError';
+import { DEFAULT_LANGUAGE } from '../constants/languages';
+import LanguageSelect from '../components/LanguageSelect';
 import './Room.css';
 
 const getUserId = (u) => (u?._id || u?.id || '').toString();
@@ -22,9 +25,13 @@ const Room = () => {
   const [socketError, setSocketError] = useState('');
 
   const [code, setCode] = useState('// Start coding together...\n');
-  const [language, setLanguage] = useState('javascript');
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [isSaving, setIsSaving] = useState(false);
+  const [syncError, setSyncError] = useState('');
   const editorRef = useRef(null);
+  const socketCleanupRef = useRef(null);
+
+  const [messagesError, setMessagesError] = useState('');
 
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
@@ -49,6 +56,10 @@ const Room = () => {
       connectToSocket();
     }
     return () => {
+      if (socketCleanupRef.current) {
+        socketCleanupRef.current();
+        socketCleanupRef.current = null;
+      }
       socketService.leaveRoom();
     };
   }, [room, token]);
@@ -58,7 +69,7 @@ const Room = () => {
       const response = await axios.get(`/api/rooms/${roomCode}`);
       const roomData = response.data.data.room;
       setRoom(roomData);
-      setLanguage(roomData.language || 'javascript');
+      setLanguage(roomData.language || DEFAULT_LANGUAGE);
 
       const currentId = getUserId(user);
       const isMember =
@@ -71,7 +82,7 @@ const Room = () => {
         setRoom(updatedResponse.data.data.room);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load room.');
+      setError(getErrorMessage(err, 'Failed to load room.'));
     } finally {
       setLoading(false);
     }
@@ -123,7 +134,7 @@ const Room = () => {
 
       await fetchMessages();
 
-      return () => {
+      socketCleanupRef.current = () => {
         unsubConnect();
         unsubDisconnect();
         unsubError();
@@ -141,8 +152,12 @@ const Room = () => {
     try {
       const response = await axios.get(`/api/messages/room/${roomCode}`);
       setMessages(response.data.data.messages || []);
+      setMessagesError('');
     } catch (error) {
       console.error('[Room] Failed to fetch messages:', error);
+      setMessagesError(
+        error.response?.data?.message || 'Failed to load chat history.'
+      );
     }
   };
 
@@ -165,8 +180,12 @@ const Room = () => {
       setIsSaving(true);
       try {
         await socketService.sendCodeChange(value, language);
+        setSyncError('');
       } catch (error) {
         console.error('[Room] Failed to send code change:', error);
+        setSyncError(
+          error.message || 'Failed to sync your changes. Collaborators may not see them.'
+        );
       } finally {
         setIsSaving(false);
       }
@@ -210,9 +229,7 @@ const Room = () => {
       }
     } catch (error) {
       console.error('[Room] Failed to execute code:', error);
-      setExecutionError(
-        error.response?.data?.message || 'Failed to execute code.'
-      );
+      setExecutionError(getErrorMessage(error, 'Failed to execute code.'));
     } finally {
       setExecuting(false);
     }
@@ -275,22 +292,13 @@ const Room = () => {
           <div className="editor-toolbar">
             <div className="language-selector">
               <label htmlFor="language">Language:</label>
-              <select
-                id="language"
+              <LanguageSelect
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-              >
-                <option value="javascript">JavaScript</option>
-                <option value="typescript">TypeScript</option>
-                <option value="python">Python</option>
-                <option value="java">Java</option>
-                <option value="cpp">C++</option>
-                <option value="c">C</option>
-                <option value="go">Go</option>
-                <option value="rust">Rust</option>
-              </select>
+              />
             </div>
             {isSaving && <span className="saving-indicator">Syncing...</span>}
+            {syncError && <span className="error-text">{syncError}</span>}
             <button
               onClick={handleRunCode}
               disabled={executing}
@@ -371,6 +379,9 @@ const Room = () => {
 
           <div className="sidebar-section chat-section">
             <h3>Room Chat</h3>
+            {messagesError && (
+              <div className="chat-error error-text">{messagesError}</div>
+            )}
             <div className="messages-container">
               {messages.map((msg, index) => (
                 <div key={msg._id || index} className="message-item">

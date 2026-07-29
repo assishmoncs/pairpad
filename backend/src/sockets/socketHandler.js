@@ -14,35 +14,29 @@
  * - Not production multi-instance ready
  */
 
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const Room = require('../models/Room');
 const Message = require('../models/Message');
+const { getUserFromToken } = require('../utils/tokenAuth');
+const {
+  findRoomByCode,
+  isRoomParticipant,
+  normalizeRoomCode,
+} = require('../utils/roomAccess');
 
 // Store online users per room: { [roomCode]: Map<socketId, { userId, name, socketId }> }
 const roomPresence = new Map();
 
 /**
- * Authenticate socket connection via JWT token
+ * Authenticate socket connection via JWT token.
+ * Returns null for absent/invalid tokens or unknown users, but lets
+ * unexpected errors (e.g. database failures) propagate so they are not
+ * masked as an "invalid token".
  */
 const authenticateSocket = async (token) => {
-  try {
-    if (!token) {
-      return null;
-    }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId).select('-password');
-    
-    if (!user) {
-      return null;
-    }
-    
-    return user;
-  } catch (error) {
-    console.error('[Socket] Authentication failed:', error.message);
+  if (!token) {
     return null;
   }
+
+  return (await getUserFromToken(token)) || null;
 };
 
 /**
@@ -60,14 +54,20 @@ const getRoomPresence = (roomCode) => {
  */
 const broadcastPresence = (io, roomCode) => {
   const presence = getRoomPresence(roomCode);
-  const users = Array.from(presence.values()).map(u => ({
-    userId: u.userId,
-    name: u.name,
-    socketId: u.socketId,
-  }));
-  
-  io.to(`room:${roomCode}`).emit('presence-update', { users });
+  io.to(`room:${roomCode}`).emit('presence-update', {
+    users: Array.from(presence.values()).map((u) => ({
+      userId: u.userId,
+      name: u.name,
+      socketId: u.socketId,
+    })),
+  });
 };
+
+/** Identity of the socket's user, as broadcast to other room members. */
+const socketIdentity = (socket) => ({
+  userId: socket.user._id.toString(),
+  name: socket.user.name,
+});
 
 /**
  * Initialize Socket.IO server
@@ -78,20 +78,32 @@ const initializeSocket = (io) => {
   // Middleware to authenticate socket connections
   io.use(async (socket, next) => {
     const token = socket.handshake.auth.token || socket.handshake.query.token;
-    
+
     if (!token) {
       return next(new Error('Authentication required. Please provide a valid token.'));
     }
-    
-    const user = await authenticateSocket(token);
-    
-    if (!user) {
-      return next(new Error('Invalid or expired token.'));
+
+    try {
+      const user = await authenticateSocket(token);
+
+      if (!user) {
+        return next(new Error('Invalid or expired token.'));
+      }
+
+      // Attach user to socket
+      socket.user = user;
+      next();
+    } catch (error) {
+      if (
+        error.name === 'JsonWebTokenError' ||
+        error.name === 'TokenExpiredError'
+      ) {
+        return next(new Error('Invalid or expired token.'));
+      }
+
+      console.error('[Socket] Authentication error:', error.message);
+      return next(new Error('Authentication service error. Please try again.'));
     }
-    
-    // Attach user to socket
-    socket.user = user;
-    next();
   });
 
   io.on('connection', (socket) => {
@@ -110,20 +122,16 @@ const initializeSocket = (io) => {
           return callback?.({ error: 'Room code is required.' });
         }
         
-        const normalizedRoomCode = roomCode.toUpperCase().trim();
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
         
         // Find room and verify membership
-        const room = await Room.findOne({ roomCode: normalizedRoomCode });
+        const room = await findRoomByCode(normalizedRoomCode);
         
         if (!room) {
           return callback?.({ error: 'Room not found.' });
         }
         
-        const isMember = room.members.some(
-          member => member._id.toString() === socket.user._id.toString()
-        );
-        
-        if (!isMember && room.owner._id.toString() !== socket.user._id.toString()) {
+        if (!isRoomParticipant(room, socket.user._id)) {
           return callback?.({ error: 'You are not authorized to join this room.' });
         }
         
@@ -133,17 +141,10 @@ const initializeSocket = (io) => {
         
         // Add to presence
         const presence = getRoomPresence(normalizedRoomCode);
-        presence.set(socket.id, {
-          userId: socket.user._id.toString(),
-          name: socket.user.name,
-          socketId: socket.id,
-        });
+        presence.set(socket.id, { ...socketIdentity(socket), socketId: socket.id });
         
         // Notify others in room
-        socket.to(`room:${normalizedRoomCode}`).emit('user-joined', {
-          userId: socket.user._id.toString(),
-          name: socket.user.name,
-        });
+        socket.to(`room:${normalizedRoomCode}`).emit('user-joined', socketIdentity(socket));
         
         // Broadcast updated presence
         broadcastPresence(io, normalizedRoomCode);
@@ -248,7 +249,7 @@ const initializeSocket = (io) => {
         const trimmedContent = content.trim().substring(0, 1000);
         
         // Find room to get MongoDB ID
-        const room = await Room.findOne({ roomCode: socket.currentRoom });
+        const room = await findRoomByCode(socket.currentRoom);
         
         if (!room) {
           return callback?.({ error: 'Room not found.' });
@@ -314,10 +315,7 @@ const handleLeaveRoom = (io, socket) => {
   socket.leave(`room:${roomCode}`);
   
   // Notify others
-  socket.to(`room:${roomCode}`).emit('user-left', {
-    userId: socket.user._id.toString(),
-    name: socket.user.name,
-  });
+  socket.to(`room:${roomCode}`).emit('user-left', socketIdentity(socket));
   
   // Broadcast updated presence
   broadcastPresence(io, roomCode);

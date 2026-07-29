@@ -1,5 +1,11 @@
 const User = require('../models/User');
 const generateToken = require('../utils/generateToken');
+const {
+  sanitizeString,
+  isValidEmail,
+  validatePassword,
+} = require('../utils/validation');
+const { sendSuccess, sendError, sendValidationError } = require('../utils/apiResponse');
 
 /** Format user object for API responses (never include password). */
 const formatUser = (user) => ({
@@ -9,6 +15,18 @@ const formatUser = (user) => ({
   email: user.email,
 });
 
+/** Build the shared auth payload returned by register and login. */
+const sendAuthSuccess = (res, message, user, status) => {
+  const token = generateToken(user._id);
+
+  return sendSuccess(
+    res,
+    message,
+    { user: formatUser(user), token },
+    { status, extra: { token } }
+  );
+};
+
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
@@ -16,49 +34,52 @@ const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        message: 'Please provide all required fields: name, email, and password.',
-      });
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
+      return sendError(
+        res,
+        400,
+        'Please provide all required fields: name, email, and password.'
+      );
     }
 
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!isValidEmail(normalizedEmail)) {
+      return sendError(res, 400, 'Please provide a valid email address.');
+    }
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.valid) {
+      return sendError(res, 400, passwordCheck.error);
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
-      return res.status(409).json({
-        message: 'An account with this email already exists.',
-      });
+      return sendError(res, 409, 'An account with this email already exists.');
     }
 
     const user = await User.create({
-      name,
-      email,
+      name: sanitizeString(name).substring(0, 50),
+      email: normalizedEmail,
       password,
     });
 
-    const token = generateToken(user._id);
-
-    res.status(201).json({
-      message: 'Registration successful.',
-      token,
-      data: {
-        user: formatUser(user),
-        token,
-      },
-    });
+    sendAuthSuccess(res, 'Registration successful.', user, 201);
   } catch (error) {
     console.error('Register error:', error.message);
 
     if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((err) => err.message);
-      return res.status(400).json({
-        message: 'Validation failed.',
-        errors: messages,
-      });
+      return sendValidationError(res, error);
     }
 
-    res.status(500).json({
-      message: 'Registration failed. Please try again.',
-    });
+    sendError(res, 500, 'Registration failed. Please try again.');
   }
 };
 
@@ -69,43 +90,33 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({
-        message: 'Please provide both email and password.',
-      });
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      !password
+    ) {
+      return sendError(res, 400, 'Please provide both email and password.');
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+    }).select('+password');
 
     if (!user) {
-      return res.status(401).json({
-        message: 'Invalid email or password.',
-      });
+      return sendError(res, 401, 'Invalid email or password.');
     }
 
     const isMatch = await user.comparePassword(password);
 
     if (!isMatch) {
-      return res.status(401).json({
-        message: 'Invalid email or password.',
-      });
+      return sendError(res, 401, 'Invalid email or password.');
     }
 
-    const token = generateToken(user._id);
-
-    res.json({
-      message: 'Login successful.',
-      token,
-      data: {
-        user: formatUser(user),
-        token,
-      },
-    });
+    sendAuthSuccess(res, 'Login successful.', user);
   } catch (error) {
     console.error('Login error:', error.message);
-    res.status(500).json({
-      message: 'Login failed. Please try again.',
-    });
+    sendError(res, 500, 'Login failed. Please try again.');
   }
 };
 
@@ -116,17 +127,14 @@ const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
-    res.json({
-      message: 'User retrieved successfully.',
-      data: {
-        user: formatUser(user),
-      },
-    });
+    if (!user) {
+      return sendError(res, 404, 'User not found.');
+    }
+
+    sendSuccess(res, 'User retrieved successfully.', { user: formatUser(user) });
   } catch (error) {
     console.error('Get me error:', error.message);
-    res.status(500).json({
-      message: 'Failed to retrieve user. Please try again.',
-    });
+    sendError(res, 500, 'Failed to retrieve user. Please try again.');
   }
 };
 

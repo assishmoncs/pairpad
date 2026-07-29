@@ -6,6 +6,8 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const connectDB = require('./config/db');
+const authRoutes = require('./routes/authRoutes');
+const roomRoutes = require('./routes/roomRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,6 +24,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'pairpad-backend' });
 });
 
+// Mount API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/rooms', roomRoutes);
+
 // Create HTTP server from Express app
 const server = http.createServer(app);
 
@@ -29,10 +35,11 @@ const server = http.createServer(app);
 async function startServer() {
   try {
     await connectDB();
-    
+
     server.listen(PORT, () => {
       console.log(`[PairPad Backend] Server running on port ${PORT}`);
       console.log(`[PairPad Backend] Health endpoint: http://localhost:${PORT}/health`);
+      console.log(`[PairPad Backend] API routes: /api/auth/*, /api/rooms/*`);
     });
   } catch (error) {
     console.error('[PairPad Backend] Failed to start server:', error.message);

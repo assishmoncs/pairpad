@@ -13,7 +13,11 @@ const FORWARDED_EVENTS = [
   'code-change',
   'cursor-update',
   'chat-message',
+  'code-execution-result',
 ];
+
+const ACK_TIMEOUT_MS = 5000;
+const CONNECT_TIMEOUT_MS = 5000;
 
 class SocketService {
   constructor() {
@@ -33,6 +37,14 @@ class SocketService {
       return;
     }
 
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
+      this.connected = false;
+      this.currentRoom = null;
+    }
+
     const socketUrl = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
     this.socket = io(socketUrl, {
@@ -43,9 +55,23 @@ class SocketService {
       reconnectionDelay: 1000,
     });
 
-    this.socket.on('connect', () => {
+    this.socket.on('connect', async () => {
       console.log('[Socket] Connected to server');
       this.connected = true;
+
+      if (this.currentRoom) {
+        try {
+          const response = await this.joinRoom(this.currentRoom);
+          if (response?.users) {
+            this.emitEvent('presence-update', { users: response.users });
+          }
+        } catch (err) {
+          console.error('[Socket] Failed to rejoin room on reconnect:', err.message);
+          this.currentRoom = null;
+          this.emitEvent('connect_error', { error: 'Failed to rejoin room after reconnect.' });
+        }
+      }
+
       this.emitEvent('connect');
     });
 
@@ -57,6 +83,7 @@ class SocketService {
 
     this.socket.on('connect_error', (error) => {
       console.error('[Socket] Connection error:', error.message);
+      this.connected = false;
       this.emitEvent('connect_error', { error: error.message });
     });
 
@@ -68,6 +95,39 @@ class SocketService {
     });
 
     return this.socket;
+  }
+
+  waitForConnection(timeoutMs = CONNECT_TIMEOUT_MS) {
+    if (this.isConnected()) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        cleanup();
+        reject(new Error('Timed out connecting to collaboration server.'));
+      }, timeoutMs);
+
+      const cleanup = () => {
+        window.clearTimeout(timeoutId);
+        offConnect();
+        offError();
+        offDisconnect();
+      };
+
+      const offConnect = this.on('connect', () => {
+        cleanup();
+        resolve();
+      });
+      const offError = this.on('connect_error', ({ error }) => {
+        cleanup();
+        reject(new Error(error || 'Failed to connect to collaboration server.'));
+      });
+      const offDisconnect = this.on('disconnect', ({ reason } = {}) => {
+        cleanup();
+        reject(new Error(reason || 'Disconnected from collaboration server.'));
+      });
+    });
   }
 
   /**
@@ -99,7 +159,12 @@ class SocketService {
         return reject(new Error(requirementError));
       }
 
-      this.socket?.emit(event, payload, (response) => {
+      this.socket?.timeout(ACK_TIMEOUT_MS).emit(event, payload, (ackError, response) => {
+        if (ackError) {
+          reject(new Error('No acknowledgement from collaboration server.'));
+          return;
+        }
+
         if (response?.error) {
           reject(new Error(response.error));
         } else {

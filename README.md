@@ -114,10 +114,9 @@ pairpad/
 │   ├── src/
 │   │   ├── context/         # AuthProvider
 │   │   ├── pages/           # Login, Register, Dashboard, Room
-│   │   ├── routes/
+│   │   ├── routes/          # App route tree
 │   │   ├── services/        # Socket client
-│   │   ├── App.jsx
-│   │   └── main.jsx
+│   │   └── main.jsx         # Vite entrypoint
 │   ├── index.html
 │   └── package.json
 ├── docs/
@@ -137,6 +136,8 @@ pairpad/
 | `POST` | `/api/auth/register` | No | Create account |
 | `POST` | `/api/auth/login` | No | Login |
 | `GET` | `/api/auth/me` | Yes | Current user |
+
+Register and login return the JWT once, at `data.token`, alongside `data.user`.
 
 ### Rooms
 

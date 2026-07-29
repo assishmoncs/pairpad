@@ -2,6 +2,22 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
+const AUTH_STATUS = {
+  LOADING: 'loading',
+  AUTHENTICATED: 'authenticated',
+  UNAUTHENTICATED: 'unauthenticated',
+  UNAVAILABLE: 'unavailable',
+};
+
+const getStoredToken = () => localStorage.getItem('token');
+
+const setAuthorizationHeader = (authToken) => {
+  if (authToken) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
+  } else {
+    delete axios.defaults.headers.common['Authorization'];
+  }
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -13,55 +29,82 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(getStoredToken);
+  const [authStatus, setAuthStatus] = useState(
+    token ? AUTH_STATUS.LOADING : AUTH_STATUS.UNAUTHENTICATED
+  );
+  const [authError, setAuthError] = useState('');
+  const [refreshCount, setRefreshCount] = useState(0);
 
-  // Configure axios defaults
-  useEffect(() => {
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  const persistToken = (authToken) => {
+    if (authToken) {
+      localStorage.setItem('token', authToken);
     } else {
-      delete axios.defaults.headers.common['Authorization'];
+      localStorage.removeItem('token');
     }
-  }, [token]);
 
-  // Check if user is logged in on mount
+    setAuthorizationHeader(authToken);
+    setToken(authToken);
+  };
+
   useEffect(() => {
+    setAuthorizationHeader(token);
+
+    let cancelled = false;
+
     const checkAuth = async () => {
       if (!token) {
-        setLoading(false);
+        setUser(null);
+        setAuthError('');
+        setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
         return;
       }
 
+      setAuthStatus(AUTH_STATUS.LOADING);
+      setAuthError('');
+
       try {
         const response = await axios.get('/api/auth/me');
+        if (cancelled) return;
+
         setUser(response.data.data.user);
+        setAuthStatus(AUTH_STATUS.AUTHENTICATED);
       } catch (error) {
+        if (cancelled) return;
+
         console.error('Auth check failed:', error.message);
-        // Only clear the session when the token is actually rejected.
-        // Transient failures (network errors, server downtime) must not
-        // silently log the user out.
         const status = error.response?.status;
+
         if (status === 401 || status === 403) {
-          localStorage.removeItem('token');
-          setToken(null);
+          persistToken(null);
+          setUser(null);
+          setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+          setAuthError('');
+          return;
         }
+
+        setAuthStatus(AUTH_STATUS.UNAVAILABLE);
+        setAuthError('We could not verify your session. Please try again.');
       } finally {
-        setLoading(false);
+        // Auth status carries the loading state.
       }
     };
 
     checkAuth();
-  }, [token]);
 
-  // Persist the session returned by the auth endpoints
+    return () => {
+      cancelled = true;
+    };
+  }, [token, refreshCount]);
+
   const authenticate = async (endpoint, payload) => {
     const response = await axios.post(endpoint, payload);
     const { user: userData, token: authToken } = response.data.data;
 
-    localStorage.setItem('token', authToken);
-    setToken(authToken);
+    persistToken(authToken);
     setUser(userData);
+    setAuthStatus(AUTH_STATUS.AUTHENTICATED);
+    setAuthError('');
 
     return response.data;
   };
@@ -73,19 +116,30 @@ export const AuthProvider = ({ children }) => {
     authenticate('/api/auth/register', { name, email, password });
 
   const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
+    persistToken(null);
     setUser(null);
+    setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+    setAuthError('');
+  };
+
+  const refreshUser = () => {
+    if (token) {
+      setRefreshCount((count) => count + 1);
+    }
   };
 
   const value = {
     user,
     token,
-    loading,
+    authStatus,
+    authError,
+    loading: authStatus === AUTH_STATUS.LOADING,
     login,
     register,
     logout,
-    isAuthenticated: !!user,
+    refreshUser,
+    isAuthenticated: !!token,
+    isUserLoaded: !!user,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

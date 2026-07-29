@@ -10,6 +10,16 @@ import LanguageSelect from '../components/LanguageSelect';
 import './Room.css';
 
 const getUserId = (u) => (u?._id || u?.id || '').toString();
+const getMessageKey = (message) => message?._id || null;
+
+export const appendUniqueMessage = (messageList, message) => {
+  const key = getMessageKey(message);
+  if (!key || !messageList.some((existing) => getMessageKey(existing) === key)) {
+    return [...messageList, message];
+  }
+
+  return messageList;
+};
 
 const Room = () => {
   const { roomCode } = useParams();
@@ -110,18 +120,46 @@ const Room = () => {
         setOnlineUsers(users || []);
       });
 
-      const unsubCodeChange = socketService.on('code-change', ({ content }) => {
-        isRemoteChange.current = true;
-        setCode(content);
-        setTimeout(() => {
-          isRemoteChange.current = false;
-        }, 0);
-      });
+      const unsubCodeChange = socketService.on(
+        'code-change',
+        ({ content, language: nextLanguage }) => {
+          isRemoteChange.current = true;
+          setCode(content);
+          if (nextLanguage) {
+            setLanguage(nextLanguage);
+          }
+          setTimeout(() => {
+            isRemoteChange.current = false;
+          }, 0);
+        }
+      );
 
       const unsubChatMessage = socketService.on('chat-message', (message) => {
-        setMessages((prev) => [...prev, message]);
-        scrollToBottom();
+        setMessages((prev) => appendUniqueMessage(prev, message));
       });
+
+      const unsubExecutionResult = socketService.on(
+        'code-execution-result',
+        ({ result }) => {
+          setExecutionResult(result);
+          if (result.status !== 'success' && result.stderr) {
+            setExecutionError(result.stderr);
+          }
+        }
+      );
+
+      socketCleanupRef.current = () => {
+        unsubConnect();
+        unsubDisconnect();
+        unsubError();
+        unsubPresence();
+        unsubCodeChange();
+        unsubChatMessage();
+        unsubExecutionResult();
+      };
+
+      await socketService.waitForConnection();
+      setConnected(true);
 
       try {
         const joinResponse = await socketService.joinRoom(roomCode);
@@ -133,15 +171,6 @@ const Room = () => {
       }
 
       await fetchMessages();
-
-      socketCleanupRef.current = () => {
-        unsubConnect();
-        unsubDisconnect();
-        unsubError();
-        unsubPresence();
-        unsubCodeChange();
-        unsubChatMessage();
-      };
     } catch (error) {
       console.error('[Room] Socket connection error:', error);
       setSocketError('Failed to connect to collaboration server.');
@@ -162,8 +191,12 @@ const Room = () => {
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleEditorMount = (editor) => {
     editorRef.current = editor;
@@ -198,12 +231,13 @@ const Room = () => {
     if (!newMessage.trim() || sendingMessage) return;
 
     setSendingMessage(true);
+    setMessagesError('');
     try {
       await socketService.sendChatMessage(newMessage.trim());
       setNewMessage('');
     } catch (error) {
       console.error('[Room] Failed to send message:', error);
-      setError('Failed to send message.');
+      setMessagesError('Failed to send message: ' + (error.message || 'Unknown error'));
     } finally {
       setSendingMessage(false);
     }
@@ -235,24 +269,6 @@ const Room = () => {
     }
   };
 
-  useEffect(() => {
-    if (!connected) return;
-
-    const unsubExecutionResult = socketService.on(
-      'code-execution-result',
-      ({ result }) => {
-        setExecutionResult(result);
-        if (result.status !== 'success' && result.stderr) {
-          setExecutionError(result.stderr);
-        }
-      }
-    );
-
-    return () => {
-      unsubExecutionResult();
-    };
-  }, [connected]);
-
   if (loading) {
     return <div className="room-page loading">Loading room...</div>;
   }
@@ -274,7 +290,7 @@ const Room = () => {
       <header className="room-header">
         <div className="header-left">
           <button onClick={() => navigate('/dashboard')} className="btn-back">
-            ← Back to Dashboard
+            Back to Dashboard
           </button>
           <h1>{room?.name}</h1>
         </div>
@@ -304,7 +320,7 @@ const Room = () => {
               disabled={executing}
               className="btn-run"
             >
-              {executing ? 'Running...' : '▶ Run Code'}
+              {executing ? 'Running...' : 'Run Code'}
             </button>
           </div>
 

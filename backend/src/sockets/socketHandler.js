@@ -134,6 +134,10 @@ const initializeSocket = (io) => {
         if (!isRoomParticipant(room, socket.user._id)) {
           return callback?.({ error: 'You are not authorized to join this room.' });
         }
+
+        if (socket.currentRoom && socket.currentRoom !== normalizedRoomCode) {
+          handleLeaveRoom(io, socket);
+        }
         
         // Join the room channel
         socket.join(`room:${normalizedRoomCode}`);
@@ -153,6 +157,7 @@ const initializeSocket = (io) => {
         const currentUsers = Array.from(presence.values()).map(u => ({
           userId: u.userId,
           name: u.name,
+          socketId: u.socketId,
         }));
         
         callback?.({
@@ -186,8 +191,6 @@ const initializeSocket = (io) => {
      * Code change event - broadcast to other room members
      * Event: code-change
      * Payload: { content: string, language?: string }
-     * 
-     * Note: MVP uses full document sync. Future: implement operational transforms or CRDT.
      */
     socket.on('code-change', (data, callback) => {
       if (!socket.currentRoom) {
@@ -271,9 +274,9 @@ const initializeSocket = (io) => {
           _id: populatedMessage._id,
           content: populatedMessage.content,
           sender: {
-            _id: populatedMessage.sender._id,
-            name: populatedMessage.sender.name,
-            email: populatedMessage.sender.email,
+            _id: populatedMessage.sender?._id || socket.user._id,
+            name: populatedMessage.sender?.name || socket.user.name,
+            email: populatedMessage.sender?.email || socket.user.email || '',
           },
           createdAt: populatedMessage.createdAt,
         });

@@ -78,7 +78,6 @@ describe('register', () => {
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({
       message: 'Registration successful.',
-      token: 'signed-token',
       data: {
         user: { _id: 'user-1', id: 'user-1', name: 'Ada', email: 'ada@example.com' },
         token: 'signed-token',
@@ -172,7 +171,6 @@ describe('login', () => {
     expect(comparePassword).toHaveBeenCalledWith(body.password);
     expect(res.json).toHaveBeenCalledWith({
       message: 'Login successful.',
-      token: 'signed-token',
       data: {
         user: { _id: 'user-1', id: 'user-1', name: 'Ada', email: 'ada@example.com' },
         token: 'signed-token',

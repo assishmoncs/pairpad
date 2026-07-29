@@ -7,6 +7,21 @@ import { DEFAULT_LANGUAGE } from '../constants/languages';
 import LanguageSelect from '../components/LanguageSelect';
 import FormField from '../components/FormField';
 
+const getRoomKey = (room) => room?._id || room?.roomCode;
+
+const isSameRoom = (left, right) => {
+  if (!left || !right) return false;
+  return (
+    (left._id && right._id && left._id === right._id) ||
+    (left.roomCode && right.roomCode && left.roomCode === right.roomCode)
+  );
+};
+
+export const upsertRoomAtTop = (roomList, room) => {
+  if (!room) return roomList;
+  return [room, ...roomList.filter((existingRoom) => !isSameRoom(existingRoom, room))];
+};
+
 const Dashboard = () => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +61,9 @@ const Dashboard = () => {
         description: newRoomDescription,
       });
       
-      setRooms([response.data.data.room, ...rooms]);
+      setRooms((currentRooms) =>
+        upsertRoomAtTop(currentRooms, response.data.data.room)
+      );
       setShowCreateForm(false);
       setNewRoomName('');
       setNewRoomLanguage(DEFAULT_LANGUAGE);
@@ -60,6 +77,7 @@ const Dashboard = () => {
 
   const handleJoinRoom = async (roomCode) => {
     try {
+      setError('');
       await axios.post(`/api/rooms/${roomCode}/join`);
       navigate(`/room/${roomCode}`);
     } catch (err) {
@@ -135,7 +153,7 @@ const Dashboard = () => {
           ) : (
             <div className="rooms-list">
               {rooms.map((room) => (
-                <div key={room._id} className="room-card">
+                <div key={getRoomKey(room)} className="room-card">
                   <h3>{room.name}</h3>
                   <p className="room-code">Code: <strong>{room.roomCode}</strong></p>
                   <p className="room-language">Language: {room.language}</p>

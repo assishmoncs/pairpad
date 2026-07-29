@@ -88,10 +88,10 @@ afterEach(() => {
   consoleError.mockRestore();
 });
 
-const joinRoom = async (socket, room = membershipRoom()) => {
+const joinRoom = async (socket, room = membershipRoom(), roomCode = ROOM_CODE) => {
   Room.findOne.mockResolvedValue(room);
   const callback = jest.fn();
-  await socket.handlers['join-room']({ roomCode: ROOM_CODE }, callback);
+  await socket.handlers['join-room']({ roomCode }, callback);
   return callback;
 };
 
@@ -118,7 +118,6 @@ describe('connection authentication', () => {
   it('rejects a valid token whose user no longer exists', async () => {
     User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue(null) });
     const token = jwt.sign({ userId: USER_ID }, JWT_SECRET);
-
     const { next } = await runMiddleware({ auth: { token }, query: {} });
 
     expect(next.mock.calls[0][0].message).toBe('Invalid or expired token.');
@@ -193,7 +192,7 @@ describe('join-room', () => {
     expect(callback).toHaveBeenCalledWith({
       success: true,
       room: { roomCode: ROOM_CODE, name: 'Test Room', language: 'javascript' },
-      users: [{ userId: USER_ID, name: 'Ada' }],
+      users: [{ userId: USER_ID, name: 'Ada', socketId: 'socket-1' }],
     });
   });
 
@@ -204,6 +203,30 @@ describe('join-room', () => {
     await socket.handlers['join-room']({ roomCode: ' abc123 ' }, jest.fn());
 
     expect(Room.findOne).toHaveBeenCalledWith({ roomCode: ROOM_CODE });
+  });
+
+  it('leaves the previous room before joining another room', async () => {
+    const socket = connect(io, createSocket());
+    await joinRoom(socket);
+    socket.left = [];
+    socket.emittedToOthers = [];
+    io.emitted = [];
+
+    await joinRoom(socket, membershipRoom({ name: 'Next Room' }), 'XYZ789');
+
+    expect(socket.left).toEqual([`room:${ROOM_CODE}`]);
+    expect(socket.currentRoom).toBe('XYZ789');
+    expect(socket.joined).toEqual([`room:${ROOM_CODE}`, 'room:XYZ789']);
+    expect(socket.emittedToOthers).toContainEqual({
+      channel: `room:${ROOM_CODE}`,
+      event: 'user-left',
+      payload: { userId: USER_ID, name: 'Ada' },
+    });
+    expect(io.emitted).toContainEqual({
+      channel: `room:${ROOM_CODE}`,
+      event: 'presence-update',
+      payload: { users: [] },
+    });
   });
 
   it('reports a failure when the lookup throws', async () => {

@@ -19,12 +19,7 @@ const formatUser = (user) => ({
 const sendAuthSuccess = (res, message, user, status) => {
   const token = generateToken(user._id);
 
-  return sendSuccess(
-    res,
-    message,
-    { user: formatUser(user), token },
-    { status, extra: { token } }
-  );
+  return sendSuccess(res, message, { user: formatUser(user), token }, { status });
 };
 
 // @desc    Register a new user

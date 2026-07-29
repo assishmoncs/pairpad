@@ -4,6 +4,9 @@ import Editor from '@monaco-editor/react';
 import axios from 'axios';
 import socketService from '../services/socketService';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/apiError';
+import { DEFAULT_LANGUAGE } from '../constants/languages';
+import LanguageSelect from '../components/LanguageSelect';
 import './Room.css';
 
 const getUserId = (u) => (u?._id || u?.id || '').toString();
@@ -22,7 +25,7 @@ const Room = () => {
   const [socketError, setSocketError] = useState('');
 
   const [code, setCode] = useState('// Start coding together...\n');
-  const [language, setLanguage] = useState('javascript');
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [isSaving, setIsSaving] = useState(false);
   const editorRef = useRef(null);
 
@@ -58,7 +61,7 @@ const Room = () => {
       const response = await axios.get(`/api/rooms/${roomCode}`);
       const roomData = response.data.data.room;
       setRoom(roomData);
-      setLanguage(roomData.language || 'javascript');
+      setLanguage(roomData.language || DEFAULT_LANGUAGE);
 
       const currentId = getUserId(user);
       const isMember =
@@ -71,7 +74,7 @@ const Room = () => {
         setRoom(updatedResponse.data.data.room);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load room.');
+      setError(getErrorMessage(err, 'Failed to load room.'));
     } finally {
       setLoading(false);
     }
@@ -210,9 +213,7 @@ const Room = () => {
       }
     } catch (error) {
       console.error('[Room] Failed to execute code:', error);
-      setExecutionError(
-        error.response?.data?.message || 'Failed to execute code.'
-      );
+      setExecutionError(getErrorMessage(error, 'Failed to execute code.'));
     } finally {
       setExecuting(false);
     }
@@ -275,20 +276,10 @@ const Room = () => {
           <div className="editor-toolbar">
             <div className="language-selector">
               <label htmlFor="language">Language:</label>
-              <select
-                id="language"
+              <LanguageSelect
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-              >
-                <option value="javascript">JavaScript</option>
-                <option value="typescript">TypeScript</option>
-                <option value="python">Python</option>
-                <option value="java">Java</option>
-                <option value="cpp">C++</option>
-                <option value="c">C</option>
-                <option value="go">Go</option>
-                <option value="rust">Rust</option>
-              </select>
+              />
             </div>
             {isSaving && <span className="saving-indicator">Syncing...</span>}
             <button

@@ -1,3 +1,5 @@
-# Services Placeholder
+# Frontend Services
 
-This folder will define API and socket client services.
+API and Socket.IO client services.
+
+**Phase 1:** Not yet implemented (Axios used directly in App.jsx for health check).

@@ -1,3 +1,5 @@
-# Controllers Placeholder
+# Backend Controllers
 
-This folder will contain request handlers for auth, rooms, chat, and code execution APIs.
+Request handlers for API endpoints (auth, rooms, chat, code execution).
+
+**Phase 1:** Not yet implemented.

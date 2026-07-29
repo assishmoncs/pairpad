@@ -1,3 +1,5 @@
-# Middleware Placeholder
+# Backend Middleware
 
-This folder will contain reusable middleware such as JWT auth guards and error handlers.
+Reusable middleware (JWT auth guards, error handlers).
+
+**Phase 1:** Not yet implemented.

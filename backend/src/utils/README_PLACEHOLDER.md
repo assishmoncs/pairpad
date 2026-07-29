@@ -1,3 +1,5 @@
-# Utils Placeholder
+# Backend Utils
 
-This folder will include utility helpers and shared constants.
+Utility helpers and shared constants.
+
+**Phase 1:** Not yet implemented.

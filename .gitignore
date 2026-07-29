@@ -1,4 +1,4 @@
-# Node modules
+# Dependencies
 node_modules/
 
 # Logs
@@ -9,15 +9,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Runtime and process files
-pids/
-*.pid
-*.pid.lock
-
-# Dependency directories
-jspm_packages/
-
-# Environment files
+# Environment
 .env
 .env.*
 !.env.example
@@ -27,21 +19,18 @@ dist/
 build/
 coverage/
 .vite/
+.eslintcache
+.cache/
+
+# Runtime
+pids/
+*.pid
+*.pid.lock
 
 # MongoDB local files
 *.db
 *.sqlite
 *.sqlite3
-mongod.lock
-WiredTiger
-WiredTiger.lock
-WiredTiger.turtle
-WiredTiger.wt
-storage.bson
-
-# Vite/React
-.eslintcache
-.cache/
 
 # IDEs and editors
 .vscode/

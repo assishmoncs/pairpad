@@ -1,3 +1,5 @@
-# Config Placeholder
+# Backend Config
 
-This folder will store environment, database, and third-party integration configuration modules.
+Configuration modules for the PairPad backend.
+
+- `db.js` - MongoDB connection using Mongoose

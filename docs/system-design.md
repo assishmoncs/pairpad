@@ -2,31 +2,73 @@
 
 ## High-Level Architecture
 
-PairPad uses a monorepo with a React + Vite frontend and a Node.js + Express backend. The backend exposes REST endpoints for auth and room orchestration, while Socket.IO handles low-latency collaboration events (code updates, cursors, presence, and chat).
+PairPad is a monorepo with a React + Vite frontend and a Node.js + Express backend. The backend exposes REST APIs for auth, rooms, messages, and code execution. Socket.IO handles low-latency collaboration (code sync, presence, chat).
 
-Core components:
+```
+Browser (React + Monaco)
+        |
+        |  REST (/api/*)  +  WebSocket (Socket.IO)
+        v
+Express + Socket.IO  ----  MongoDB
+        |
+        +---- Judge0 (code execution)
+```
 
-- **Frontend (React + Monaco Editor):** room UI, collaborative editor surface, chat panel, and user presence indicators.
-- **Backend API (Express):** authentication (JWT placeholder), room lifecycle, participant management, and execution request coordination.
-- **Realtime Layer (Socket.IO):** room channels for editor diffs, typing, chat, and online user status.
-- **Database (MongoDB):** users, rooms, membership, messages, and session metadata.
-- **Code Execution Service (Judge0 placeholder):** receives execution requests and returns results to participants.
+## Core Components
 
-## Data Flow Overview
+### Frontend
+- Auth pages (login, register) and JWT stored in `localStorage`
+- Dashboard for creating and opening rooms
+- Room page: Monaco editor, presence list, chat, run-code output
+- `AuthContext` + Axios defaults for `Authorization` header
+- Socket client service for realtime events
 
-1. User authenticates (placeholder JWT flow).
-2. User creates/joins a room via API.
-3. Room clients connect to Socket.IO room namespace/channel.
-4. Monaco edits are broadcast to room participants in near real time.
-5. Chat/presence events are emitted and persisted.
-6. Code run requests are forwarded to Judge0 service wrapper and results are returned.
+### Backend API
+- JWT authentication (register, login, `/me`)
+- Room lifecycle (create, join, leave, delete)
+- Chat message history
+- Code execution via Judge0 wrapper
+- Rate limiting on auth and execute routes
+- Centralized error handling
 
-## Future Feature Roadmap
+### Realtime Layer (Socket.IO)
+- JWT required on handshake
+- Room membership checked before join
+- Events: `join-room`, `leave-room`, `code-change`, `cursor-update`, `chat-message`
+- Presence broadcast on join/leave/disconnect
+- Chat messages persisted to MongoDB then broadcast
 
-- CRDT/OT conflict-resolution strategy for robust concurrent editing.
-- Role-based room permissions (owner/editor/viewer).
-- Multi-language templates and test-case execution workflows.
-- Replay mode for interview/session review.
-- WebRTC voice/video integration for pair programming.
-- Analytics dashboards for coding interview performance insights.
-- Horizontal scaling with Redis adapter for multi-instance Socket.IO.
+### Database (MongoDB + Mongoose)
+- **User** — name, email (unique), hashed password
+- **Room** — name, roomCode, owner, members, language, description
+- **Message** — room, sender, content
+
+### Code Execution (Judge0)
+- Server-side only (API key never sent to the client)
+- Language map for JS, TS, Python, Java, C/C++, Go, Rust, and others
+- Optional broadcast of results to the Socket.IO room
+
+## Data Flow
+
+1. User registers or logs in → JWT returned and stored client-side.
+2. User creates or joins a room via REST.
+3. Room page connects Socket.IO with the JWT and joins the room channel.
+4. Monaco edits emit `code-change`; peers apply updates (full-document sync MVP).
+5. Chat messages are saved and broadcast.
+6. Run Code posts to `/api/execute`; Judge0 result is returned (and may be broadcast).
+
+## MVP Limitations
+
+- **Conflict resolution:** last-write-wins full document sync (not CRDT/OT yet).
+- **Scaling:** in-memory presence; no Redis adapter for multi-instance Socket.IO.
+- **Persistence:** editor buffer is not snapshotted to the room document on every change.
+- **Cursors:** server supports cursor events; client coloring is minimal.
+
+## Roadmap
+
+- CRDT or OT for conflict-safe concurrent editing
+- Role-based permissions (owner / editor / viewer)
+- Persist editor snapshots and session replay
+- Redis adapter for horizontal Socket.IO scaling
+- Docker Compose + CI pipeline
+- Interview tooling (timer, question packs, test cases)

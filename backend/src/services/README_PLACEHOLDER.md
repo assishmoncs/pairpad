@@ -1,3 +1,5 @@
-# Services Placeholder
+# Backend Services
 
-This folder will hold business services (Judge0 wrapper, room/session orchestration, etc.).
+Business logic services (e.g., Judge0 wrapper, room orchestration).
+
+**Phase 1:** Not yet implemented.

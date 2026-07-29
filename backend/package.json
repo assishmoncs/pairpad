@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest --coverage --detectOpenHandles --forceExit",
+    "test:unit": "jest --coverage --testPathIgnorePatterns tests/auth.test.js",
     "test:watch": "jest --watch"
   },
   "dependencies": {

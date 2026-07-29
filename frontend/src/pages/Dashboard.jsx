@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/apiError';
+import { DEFAULT_LANGUAGE } from '../constants/languages';
+import LanguageSelect from '../components/LanguageSelect';
+import FormField from '../components/FormField';
 
 const Dashboard = () => {
   const [rooms, setRooms] = useState([]);
@@ -10,7 +14,7 @@ const Dashboard = () => {
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
-  const [newRoomLanguage, setNewRoomLanguage] = useState('javascript');
+  const [newRoomLanguage, setNewRoomLanguage] = useState(DEFAULT_LANGUAGE);
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -24,7 +28,7 @@ const Dashboard = () => {
       const response = await axios.get('/api/rooms');
       setRooms(response.data.data.rooms);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load rooms.');
+      setError(getErrorMessage(err, 'Failed to load rooms.'));
     } finally {
       setLoading(false);
     }
@@ -45,10 +49,10 @@ const Dashboard = () => {
       setRooms([response.data.data.room, ...rooms]);
       setShowCreateForm(false);
       setNewRoomName('');
-      setNewRoomLanguage('javascript');
+      setNewRoomLanguage(DEFAULT_LANGUAGE);
       setNewRoomDescription('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create room.');
+      setError(getErrorMessage(err, 'Failed to create room.'));
     } finally {
       setCreating(false);
     }
@@ -59,7 +63,7 @@ const Dashboard = () => {
       await axios.post(`/api/rooms/${roomCode}/join`);
       navigate(`/room/${roomCode}`);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to join room.');
+      setError(getErrorMessage(err, 'Failed to join room.'));
     }
   };
 
@@ -94,47 +98,31 @@ const Dashboard = () => {
 
           {showCreateForm && (
             <form onSubmit={handleCreateRoom} className="create-room-form">
-              <div className="form-group">
-                <label htmlFor="roomName">Room Name</label>
-                <input
-                  type="text"
-                  id="roomName"
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                  placeholder="Enter room name"
-                  required
-                />
-              </div>
+              <FormField
+                id="roomName"
+                label="Room Name"
+                value={newRoomName}
+                onChange={setNewRoomName}
+                placeholder="Enter room name"
+                required
+              />
               
               <div className="form-group">
                 <label htmlFor="language">Language</label>
-                <select
-                  id="language"
+                <LanguageSelect
                   value={newRoomLanguage}
                   onChange={(e) => setNewRoomLanguage(e.target.value)}
-                >
-                  <option value="javascript">JavaScript</option>
-                  <option value="python">Python</option>
-                  <option value="java">Java</option>
-                  <option value="cpp">C++</option>
-                  <option value="c">C</option>
-                  <option value="go">Go</option>
-                  <option value="rust">Rust</option>
-                  <option value="typescript">TypeScript</option>
-                </select>
-              </div>
-              
-              <div className="form-group">
-                <label htmlFor="description">Description (optional)</label>
-                <input
-                  type="text"
-                  id="description"
-                  value={newRoomDescription}
-                  onChange={(e) => setNewRoomDescription(e.target.value)}
-                  placeholder="Brief description"
-                  maxLength={200}
                 />
               </div>
+              
+              <FormField
+                id="description"
+                label="Description (optional)"
+                value={newRoomDescription}
+                onChange={setNewRoomDescription}
+                placeholder="Brief description"
+                maxLength={200}
+              />
               
               <button type="submit" disabled={creating} className="btn-primary">
                 {creating ? 'Creating...' : 'Create Room'}

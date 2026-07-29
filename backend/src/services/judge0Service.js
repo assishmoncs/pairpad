@@ -24,6 +24,19 @@ const LANGUAGE_MAP = {
   typescript: 74,      // TypeScript (5.0.3)
 };
 
+// Shared axios config for every Judge0 call
+const judge0RequestConfig = (extraHeaders = {}) => ({
+  headers: {
+    ...extraHeaders,
+    'X-RapidAPI-Key': JUDGE0_API_KEY,
+    'X-RapidAPI-Host': JUDGE0_RAPIDAPI_HOST,
+  },
+  params: {
+    base64_encoded: false,
+    fields: '*',
+  },
+});
+
 /**
  * Get Judge0 language ID from our internal language name.
  * Throws for unsupported languages instead of silently defaulting,
@@ -66,17 +79,7 @@ async function submitCode(sourceCode, language, stdin = '') {
         stdin: stdin || '',
         wait: false, // Don't wait, we'll poll for results
       },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RapidAPI-Key': JUDGE0_API_KEY,
-          'X-RapidAPI-Host': JUDGE0_RAPIDAPI_HOST,
-        },
-        params: {
-          base64_encoded: false,
-          fields: '*',
-        },
-      }
+      judge0RequestConfig({ 'Content-Type': 'application/json' })
     );
 
     const submissionToken = submitResponse.data.token;
@@ -112,16 +115,7 @@ async function pollForResult(token, maxAttempts = 30, delay = 500) {
     try {
       const response = await axios.get(
         `${JUDGE0_BASE_URL}/submissions/${token}`,
-        {
-          headers: {
-            'X-RapidAPI-Key': JUDGE0_API_KEY,
-            'X-RapidAPI-Host': JUDGE0_RAPIDAPI_HOST,
-          },
-          params: {
-            base64_encoded: false,
-            fields: '*',
-          },
-        }
+        judge0RequestConfig()
       );
 
       const result = response.data;

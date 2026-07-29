@@ -1,7 +1,12 @@
 // Execute code controller — Judge0 API, auth + room membership required
 
 const judge0Service = require('../services/judge0Service');
-const Room = require('../models/Room');
+const { sendSuccess, sendError } = require('../utils/apiResponse');
+const {
+  findRoomByCode,
+  isRoomParticipant,
+  normalizeRoomCode,
+} = require('../utils/roomAccess');
 
 /**
  * POST /api/execute
@@ -12,53 +17,39 @@ const executeCode = async (req, res) => {
     const { source_code, language, stdin, roomCode } = req.body;
 
     if (!source_code || typeof source_code !== 'string') {
-      return res.status(400).json({
-        message: 'Source code is required and must be a string.',
-      });
+      return sendError(res, 400, 'Source code is required and must be a string.');
     }
 
     if (!language || typeof language !== 'string') {
-      return res.status(400).json({
-        message: 'Language is required.',
-      });
+      return sendError(res, 400, 'Language is required.');
     }
 
     if (!roomCode || typeof roomCode !== 'string') {
-      return res.status(400).json({
-        message: 'roomCode is required to execute code in a room context.',
-      });
+      return sendError(res, 400, 'roomCode is required to execute code in a room context.');
     }
 
     const supportedLanguages = Object.keys(judge0Service.LANGUAGE_MAP);
     if (!supportedLanguages.includes(language.toLowerCase())) {
-      return res.status(400).json({
-        message: `Unsupported language. Supported: ${supportedLanguages.join(', ')}`,
-      });
+      return sendError(
+        res,
+        400,
+        `Unsupported language. Supported: ${supportedLanguages.join(', ')}`
+      );
     }
 
     if (stdin !== undefined && typeof stdin !== 'string') {
-      return res.status(400).json({
-        message: 'Stdin must be a string.',
-      });
+      return sendError(res, 400, 'Stdin must be a string.');
     }
 
-    const normalizedCode = roomCode.toUpperCase().trim();
-    const room = await Room.findOne({ roomCode: normalizedCode });
+    const normalizedCode = normalizeRoomCode(roomCode);
+    const room = await findRoomByCode(normalizedCode);
 
     if (!room) {
-      return res.status(404).json({
-        message: 'Room not found.',
-      });
+      return sendError(res, 404, 'Room not found.');
     }
 
-    const userId = req.user._id.toString();
-    const isMember = room.members.some((m) => m.toString() === userId);
-    const isOwner = room.owner.toString() === userId;
-
-    if (!isMember && !isOwner) {
-      return res.status(403).json({
-        message: 'You must be a member of the room to execute code.',
-      });
+    if (!isRoomParticipant(room, req.user._id)) {
+      return sendError(res, 403, 'You must be a member of the room to execute code.');
     }
 
     const result = await judge0Service.submitCode(
@@ -78,42 +69,35 @@ const executeCode = async (req, res) => {
       });
     }
 
-    res.json({
-      message: 'Code executed successfully.',
-      data: { result },
-    });
+    sendSuccess(res, 'Code executed successfully.', { result });
   } catch (error) {
     console.error('[ExecuteController] Error executing code:', error.message);
 
     if (error.message.includes('API key')) {
-      return res.status(503).json({
-        message:
-          'Code execution service not configured. Please contact the administrator.',
-      });
+      return sendError(
+        res,
+        503,
+        'Code execution service not configured. Please contact the administrator.'
+      );
     }
 
     if (error.message.includes('Rate limit')) {
-      return res.status(429).json({
-        message: 'Rate limit exceeded. Please try again in a few moments.',
-      });
+      return sendError(res, 429, 'Rate limit exceeded. Please try again in a few moments.');
     }
 
     if (error.message.includes('timed out')) {
-      return res.status(408).json({
-        message:
-          'Code execution timed out. The code may be taking too long to run.',
-      });
+      return sendError(
+        res,
+        408,
+        'Code execution timed out. The code may be taking too long to run.'
+      );
     }
 
     if (error.message.includes('Unsupported language')) {
-      return res.status(400).json({
-        message: error.message,
-      });
+      return sendError(res, 400, error.message);
     }
 
-    res.status(500).json({
-      message: 'Failed to execute code. Please try again.',
-    });
+    sendError(res, 500, 'Failed to execute code. Please try again.');
   }
 };
 

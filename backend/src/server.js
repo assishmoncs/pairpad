@@ -93,6 +93,12 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
+process.on('unhandledRejection', (reason) => {
+  const message = reason instanceof Error ? reason.stack || reason.message : reason;
+  console.error('[PairPad Backend] Unhandled promise rejection:', message);
+  process.exit(1);
+});
+
 startServer();
 
 module.exports = app;

@@ -38,8 +38,14 @@ export const AuthProvider = ({ children }) => {
         setUser(response.data.data.user);
       } catch (error) {
         console.error('Auth check failed:', error.message);
-        localStorage.removeItem('token');
-        setToken(null);
+        // Only clear the session when the token is actually rejected.
+        // Transient failures (network errors, server downtime) must not
+        // silently log the user out.
+        const status = error.response?.status;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem('token');
+          setToken(null);
+        }
       } finally {
         setLoading(false);
       }

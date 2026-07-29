@@ -24,7 +24,11 @@ const Room = () => {
   const [code, setCode] = useState('// Start coding together...\n');
   const [language, setLanguage] = useState('javascript');
   const [isSaving, setIsSaving] = useState(false);
+  const [syncError, setSyncError] = useState('');
   const editorRef = useRef(null);
+  const socketCleanupRef = useRef(null);
+
+  const [messagesError, setMessagesError] = useState('');
 
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
@@ -49,6 +53,10 @@ const Room = () => {
       connectToSocket();
     }
     return () => {
+      if (socketCleanupRef.current) {
+        socketCleanupRef.current();
+        socketCleanupRef.current = null;
+      }
       socketService.leaveRoom();
     };
   }, [room, token]);
@@ -123,7 +131,7 @@ const Room = () => {
 
       await fetchMessages();
 
-      return () => {
+      socketCleanupRef.current = () => {
         unsubConnect();
         unsubDisconnect();
         unsubError();
@@ -141,8 +149,12 @@ const Room = () => {
     try {
       const response = await axios.get(`/api/messages/room/${roomCode}`);
       setMessages(response.data.data.messages || []);
+      setMessagesError('');
     } catch (error) {
       console.error('[Room] Failed to fetch messages:', error);
+      setMessagesError(
+        error.response?.data?.message || 'Failed to load chat history.'
+      );
     }
   };
 
@@ -165,8 +177,12 @@ const Room = () => {
       setIsSaving(true);
       try {
         await socketService.sendCodeChange(value, language);
+        setSyncError('');
       } catch (error) {
         console.error('[Room] Failed to send code change:', error);
+        setSyncError(
+          error.message || 'Failed to sync your changes. Collaborators may not see them.'
+        );
       } finally {
         setIsSaving(false);
       }
@@ -291,6 +307,7 @@ const Room = () => {
               </select>
             </div>
             {isSaving && <span className="saving-indicator">Syncing...</span>}
+            {syncError && <span className="error-text">{syncError}</span>}
             <button
               onClick={handleRunCode}
               disabled={executing}
@@ -371,6 +388,9 @@ const Room = () => {
 
           <div className="sidebar-section chat-section">
             <h3>Room Chat</h3>
+            {messagesError && (
+              <div className="chat-error error-text">{messagesError}</div>
+            )}
             <div className="messages-container">
               {messages.map((msg, index) => (
                 <div key={msg._id || index} className="message-item">

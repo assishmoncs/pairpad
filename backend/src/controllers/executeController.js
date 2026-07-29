@@ -105,9 +105,14 @@ const executeCode = async (req, res) => {
       });
     }
 
+    if (error.message.includes('Unsupported language')) {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
     res.status(500).json({
-      message: 'Failed to execute code.',
-      error: error.message,
+      message: 'Failed to execute code. Please try again.',
     });
   }
 };

@@ -1,29 +1,14 @@
-const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Room = require('../models/Room');
-const User = require('../models/User');
 const { validateRoomName, sanitizeString } = require('../utils/validation');
-
-const ROOM_CODE_LENGTH = 6;
-const ROOM_CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-// Room codes double as invite tokens, so they must be unpredictable
-const generateRoomCode = () => {
-  let code = '';
-  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
-    code += ROOM_CODE_ALPHABET.charAt(
-      crypto.randomInt(ROOM_CODE_ALPHABET.length)
-    );
-  }
-  return code;
-};
-
-// Room codes are user-supplied path params; only accept the canonical format
-const normalizeRoomCode = (roomCode) => {
-  if (typeof roomCode !== 'string') return null;
-  const normalized = roomCode.trim().toUpperCase();
-  return /^[A-Z0-9]{6}$/.test(normalized) ? normalized : null;
-};
+const { sendSuccess, sendError, sendValidationError } = require('../utils/apiResponse');
+const {
+  findRoomByCode,
+  findPopulatedRoomById,
+  findPopulatedRoomsForMember,
+  generateUniqueRoomCode,
+  isRoomParticipant,
+} = require('../utils/roomAccess');
 
 // @desc    Create a new room
 // @route   POST /api/rooms
@@ -34,25 +19,18 @@ const createRoom = async (req, res) => {
 
     const nameCheck = validateRoomName(name);
     if (!nameCheck.valid) {
-      return res.status(400).json({ message: nameCheck.error });
+      return sendError(res, 400, nameCheck.error);
     }
 
     if (language !== undefined && typeof language !== 'string') {
-      return res.status(400).json({ message: 'Language must be a string.' });
+      return sendError(res, 400, 'Language must be a string.');
     }
 
     if (description !== undefined && typeof description !== 'string') {
-      return res.status(400).json({ message: 'Description must be a string.' });
+      return sendError(res, 400, 'Description must be a string.');
     }
 
-    // Generate unique room code
-    let roomCode = generateRoomCode();
-    let existingRoom = await Room.findOne({ roomCode });
-    
-    while (existingRoom) {
-      roomCode = generateRoomCode();
-      existingRoom = await Room.findOne({ roomCode });
-    }
+    const roomCode = await generateUniqueRoomCode();
 
     // Create room with owner as first member
     const room = await Room.create({
@@ -64,31 +42,17 @@ const createRoom = async (req, res) => {
       description: sanitizeString(description || '').substring(0, 200),
     });
 
-    // Populate owner details
-    const populatedRoom = await Room.findById(room._id)
-      .populate('owner', 'name email')
-      .populate('members', 'name email');
+    const populatedRoom = await findPopulatedRoomById(room._id);
 
-    res.status(201).json({
-      message: 'Room created successfully.',
-      data: {
-        room: populatedRoom,
-      },
-    });
+    sendSuccess(res, 'Room created successfully.', { room: populatedRoom }, { status: 201 });
   } catch (error) {
     console.error('Create room error:', error.message);
-    
+
     if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({ 
-        message: 'Validation failed.',
-        errors: messages,
-      });
+      return sendValidationError(res, error);
     }
 
-    res.status(500).json({ 
-      message: 'Failed to create room. Please try again.' 
-    });
+    sendError(res, 500, 'Failed to create room. Please try again.');
   }
 };
 
@@ -97,25 +61,15 @@ const createRoom = async (req, res) => {
 // @access  Private
 const getUserRooms = async (req, res) => {
   try {
-    const rooms = await Room.find({
-      members: req.user._id,
-    })
-      .populate('owner', 'name email')
-      .populate('members', 'name email')
-      .sort({ createdAt: -1 });
+    const rooms = await findPopulatedRoomsForMember(req.user._id);
 
-    res.json({
-      message: 'Rooms retrieved successfully.',
-      data: {
-        rooms,
-        count: rooms.length,
-      },
+    sendSuccess(res, 'Rooms retrieved successfully.', {
+      rooms,
+      count: rooms.length,
     });
   } catch (error) {
     console.error('Get user rooms error:', error.message);
-    res.status(500).json({ 
-      message: 'Failed to retrieve rooms. Please try again.' 
-    });
+    sendError(res, 500, 'Failed to retrieve rooms. Please try again.');
   }
 };
 
@@ -127,55 +81,29 @@ const getRoom = async (req, res) => {
     const { identifier } = req.params;
 
     // Try to find by roomCode first, then by _id
-    const normalizedCode = normalizeRoomCode(identifier);
-
-    let room = normalizedCode
-      ? await Room.findOne({ roomCode: normalizedCode })
-          .populate('owner', 'name email')
-          .populate('members', 'name email')
-      : null;
+    let room = await findRoomByCode(identifier, { populate: true });
 
     if (!room && mongoose.isValidObjectId(identifier)) {
-      room = await Room.findById(identifier)
-        .populate('owner', 'name email')
-        .populate('members', 'name email');
+      room = await findPopulatedRoomById(identifier);
     }
 
     if (!room) {
-      return res.status(404).json({ 
-        message: 'Room not found.' 
-      });
+      return sendError(res, 404, 'Room not found.');
     }
 
-    // Check if user is a member
-    const isMember = room.members.some(
-      member => member._id.toString() === req.user._id.toString()
-    );
-
-    if (!isMember && room.owner._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ 
-        message: 'You are not authorized to access this room.' 
-      });
+    if (!isRoomParticipant(room, req.user._id)) {
+      return sendError(res, 403, 'You are not authorized to access this room.');
     }
 
-    res.json({
-      message: 'Room retrieved successfully.',
-      data: {
-        room,
-      },
-    });
+    sendSuccess(res, 'Room retrieved successfully.', { room });
   } catch (error) {
     console.error('Get room error:', error.message);
-    
+
     if (error.name === 'CastError') {
-      return res.status(404).json({ 
-        message: 'Room not found.' 
-      });
+      return sendError(res, 404, 'Room not found.');
     }
 
-    res.status(500).json({ 
-      message: 'Failed to retrieve room. Please try again.' 
-    });
+    sendError(res, 500, 'Failed to retrieve room. Please try again.');
   }
 };
 
@@ -184,31 +112,20 @@ const getRoom = async (req, res) => {
 // @access  Private
 const joinRoom = async (req, res) => {
   try {
-    const normalizedCode = normalizeRoomCode(req.params.roomCode);
-
-    const room = normalizedCode
-      ? await Room.findOne({ roomCode: normalizedCode })
-      : null;
+    const room = await findRoomByCode(req.params.roomCode);
 
     if (!room) {
-      return res.status(404).json({ 
-        message: 'Room not found.' 
-      });
+      return sendError(res, 404, 'Room not found.');
     }
 
     // Check if already a member
     const isMember = room.members.some(
-      member => member.toString() === req.user._id.toString()
+      (member) => member.toString() === req.user._id.toString()
     );
 
     if (isMember) {
-      return res.json({
-        message: 'You are already a member of this room.',
-        data: {
-          room: await Room.findById(room._id)
-            .populate('owner', 'name email')
-            .populate('members', 'name email'),
-        },
+      return sendSuccess(res, 'You are already a member of this room.', {
+        room: await findPopulatedRoomById(room._id),
       });
     }
 
@@ -216,21 +133,12 @@ const joinRoom = async (req, res) => {
     room.members.push(req.user._id);
     await room.save();
 
-    const updatedRoom = await Room.findById(room._id)
-      .populate('owner', 'name email')
-      .populate('members', 'name email');
-
-    res.json({
-      message: 'Successfully joined the room.',
-      data: {
-        room: updatedRoom,
-      },
+    sendSuccess(res, 'Successfully joined the room.', {
+      room: await findPopulatedRoomById(room._id),
     });
   } catch (error) {
     console.error('Join room error:', error.message);
-    res.status(500).json({ 
-      message: 'Failed to join room. Please try again.' 
-    });
+    sendError(res, 500, 'Failed to join room. Please try again.');
   }
 };
 
@@ -239,39 +147,31 @@ const joinRoom = async (req, res) => {
 // @access  Private
 const leaveRoom = async (req, res) => {
   try {
-    const normalizedCode = normalizeRoomCode(req.params.roomCode);
-
-    const room = normalizedCode
-      ? await Room.findOne({ roomCode: normalizedCode })
-      : null;
+    const room = await findRoomByCode(req.params.roomCode);
 
     if (!room) {
-      return res.status(404).json({ 
-        message: 'Room not found.' 
-      });
+      return sendError(res, 404, 'Room not found.');
     }
 
     // Owner cannot leave (must transfer ownership or delete room)
     if (room.owner.toString() === req.user._id.toString()) {
-      return res.status(400).json({ 
-        message: 'Room owner cannot leave. Transfer ownership or delete the room instead.' 
-      });
+      return sendError(
+        res,
+        400,
+        'Room owner cannot leave. Transfer ownership or delete the room instead.'
+      );
     }
 
     // Remove user from members
     room.members = room.members.filter(
-      member => member.toString() !== req.user._id.toString()
+      (member) => member.toString() !== req.user._id.toString()
     );
     await room.save();
 
-    res.json({
-      message: 'Successfully left the room.',
-    });
+    sendSuccess(res, 'Successfully left the room.');
   } catch (error) {
     console.error('Leave room error:', error.message);
-    res.status(500).json({ 
-      message: 'Failed to leave room. Please try again.' 
-    });
+    sendError(res, 500, 'Failed to leave room. Please try again.');
   }
 };
 
@@ -280,35 +180,23 @@ const leaveRoom = async (req, res) => {
 // @access  Private
 const deleteRoom = async (req, res) => {
   try {
-    const normalizedCode = normalizeRoomCode(req.params.roomCode);
-
-    const room = normalizedCode
-      ? await Room.findOne({ roomCode: normalizedCode })
-      : null;
+    const room = await findRoomByCode(req.params.roomCode);
 
     if (!room) {
-      return res.status(404).json({ 
-        message: 'Room not found.' 
-      });
+      return sendError(res, 404, 'Room not found.');
     }
 
     // Check ownership
     if (room.owner.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ 
-        message: 'Only the room owner can delete this room.' 
-      });
+      return sendError(res, 403, 'Only the room owner can delete this room.');
     }
 
     await Room.deleteOne({ _id: room._id });
 
-    res.json({
-      message: 'Room deleted successfully.',
-    });
+    sendSuccess(res, 'Room deleted successfully.');
   } catch (error) {
     console.error('Delete room error:', error.message);
-    res.status(500).json({ 
-      message: 'Failed to delete room. Please try again.' 
-    });
+    sendError(res, 500, 'Failed to delete room. Please try again.');
   }
 };
 

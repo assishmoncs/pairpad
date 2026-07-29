@@ -26,19 +26,17 @@ const {
 const roomPresence = new Map();
 
 /**
- * Authenticate socket connection via JWT token
+ * Authenticate socket connection via JWT token.
+ * Returns null for absent/invalid tokens or unknown users, but lets
+ * unexpected errors (e.g. database failures) propagate so they are not
+ * masked as an "invalid token".
  */
 const authenticateSocket = async (token) => {
-  try {
-    if (!token) {
-      return null;
-    }
-
-    return await getUserFromToken(token);
-  } catch (error) {
-    console.error('[Socket] Authentication failed:', error.message);
+  if (!token) {
     return null;
   }
+
+  return (await getUserFromToken(token)) || null;
 };
 
 /**
@@ -80,20 +78,32 @@ const initializeSocket = (io) => {
   // Middleware to authenticate socket connections
   io.use(async (socket, next) => {
     const token = socket.handshake.auth.token || socket.handshake.query.token;
-    
+
     if (!token) {
       return next(new Error('Authentication required. Please provide a valid token.'));
     }
-    
-    const user = await authenticateSocket(token);
-    
-    if (!user) {
-      return next(new Error('Invalid or expired token.'));
+
+    try {
+      const user = await authenticateSocket(token);
+
+      if (!user) {
+        return next(new Error('Invalid or expired token.'));
+      }
+
+      // Attach user to socket
+      socket.user = user;
+      next();
+    } catch (error) {
+      if (
+        error.name === 'JsonWebTokenError' ||
+        error.name === 'TokenExpiredError'
+      ) {
+        return next(new Error('Invalid or expired token.'));
+      }
+
+      console.error('[Socket] Authentication error:', error.message);
+      return next(new Error('Authentication service error. Please try again.'));
     }
-    
-    // Attach user to socket
-    socket.user = user;
-    next();
   });
 
   io.on('connection', (socket) => {

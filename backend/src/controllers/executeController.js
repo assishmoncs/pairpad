@@ -93,7 +93,11 @@ const executeCode = async (req, res) => {
       );
     }
 
-    sendError(res, 500, 'Failed to execute code.', { error: error.message });
+    if (error.message.includes('Unsupported language')) {
+      return sendError(res, 400, error.message);
+    }
+
+    sendError(res, 500, 'Failed to execute code. Please try again.');
   }
 };
 

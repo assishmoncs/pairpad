@@ -1,127 +1,115 @@
 # PairPad
 
-PairPad is a full-stack real-time collaborative coding platform inspired by Google Docs, LeetCode, and CodeSignal.
+**Phase 2 Complete – Auth + Rooms working; realtime and execution next**
 
-## Overview
+Real-time collaborative coding platform built with Node.js, React, and WebSockets.
 
-PairPad allows users to create or join coding rooms, collaborate in real time, chat with participants, view active users, and run code through an execution service.
+## Current Status (Phase 2)
 
-## Features
+✅ **Implemented:**
+- JWT authentication (register, login, protected routes)
+- User management with bcrypt password hashing
+- Room lifecycle (create, join, view, leave, delete)
+- MongoDB models for Users, Rooms, and Messages
+- REST API endpoints for auth and rooms
+- React frontend with auth context and protected routes
+- Dashboard for room management
+- Room pages with member lists
 
-- Real-time collaborative code editing rooms
-- In-room participant chat
-- Online user presence indicators
-- Placeholder JWT-based authentication flow
-- Placeholder Judge0-based code execution integration
-- Monorepo-ready frontend and backend workspace structure
+🚧 **Coming in Phase 3:**
+- Real-time collaboration with Socket.IO
+- Monaco editor integration
+- Live code synchronization
 
-## Planned Features
+🚧 **Coming in Phase 4:**
+- Code execution via Judge0
+- Chat functionality
+- Advanced room features
 
-- Conflict-safe synchronization (CRDT/OT)
-- Rich role/permission controls inside rooms
-- Interview session tooling and replay support
-- Multi-language templates with testcase packs
-- Scalable multi-instance socket architecture
+## Prerequisites
 
-## Tech Stack
+- Node.js 16+
+- MongoDB (local or cloud instance)
 
-- **Frontend:** React, Vite, Monaco Editor, Axios, Socket.IO Client
-- **Backend:** Node.js, Express, Socket.IO, MongoDB (Mongoose), JWT, bcryptjs
-- **Docs:** Markdown architecture and roadmap documentation
+## Installation
 
-## Folder Structure
-
-```text
-pairpad/
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── layouts/
-│   │   ├── services/
-│   │   ├── hooks/
-│   │   ├── context/
-│   │   ├── routes/
-│   │   ├── assets/
-│   │   └── App.jsx
-│   ├── public/
-│   ├── package.json
-│   └── vite.config.js
-├── backend/
-│   ├── src/
-│   │   ├── controllers/
-│   │   ├── routes/
-│   │   ├── models/
-│   │   ├── middleware/
-│   │   ├── services/
-│   │   ├── sockets/
-│   │   ├── config/
-│   │   ├── utils/
-│   │   └── server.js
-│   ├── package.json
-│   ├── .env.example
-│   └── nodemon.json
-├── docs/
-│   └── system-design.md
-├── screenshots/
-├── README.md
-├── LICENSE
-└── .gitignore
-```
-
-## Installation Guide
-
-1. Clone the repository.
-2. Install frontend dependencies:
-   ```bash
-   cd frontend
-   npm install
-   ```
-3. Install backend dependencies:
-   ```bash
-   cd ../backend
-   npm install
-   ```
-
-## Environment Variables
-
-Copy and adapt backend environment settings:
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Set values for MongoDB, JWT secret, frontend URL, and Judge0 API credentials.
-
-## Development Setup
-
-Run backend:
+### Backend
 
 ```bash
 cd backend
+npm install
+cp .env.example .env
+# Edit .env with your settings (MONGODB_URI, JWT_SECRET, etc.)
 npm run dev
 ```
 
-Run frontend (in another terminal):
+Server will start on `http://localhost:5000`
+
+### Frontend
 
 ```bash
 cd frontend
+npm install
 npm run dev
 ```
 
-## Future Improvements
+App will be available at `http://localhost:5173`
 
-- Add complete auth/session lifecycle and validation
-- Implement production-grade room synchronization engine
-- Add persistence for editor snapshots and room activity
-- Integrate robust CI, tests, and containerized deployment
+## API Endpoints
 
-## Contributing
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login user
+- `GET /api/auth/me` - Get current user (protected)
 
-1. Fork the repo and create a feature branch.
-2. Make focused changes with tests where applicable.
-3. Open a pull request with a clear description.
+### Rooms
+- `POST /api/rooms` - Create new room (protected)
+- `GET /api/rooms` - List user's rooms (protected)
+- `GET /api/rooms/:identifier` - Get room by ID or code (protected)
+- `POST /api/rooms/:roomCode/join` - Join a room (protected)
+- `POST /api/rooms/:roomCode/leave` - Leave a room (protected)
+- `DELETE /api/rooms/:roomCode` - Delete room (owner only, protected)
 
-## License
+## Folder Structure
 
-This project is licensed under the MIT License. See [LICENSE](./LICENSE).
+```
+pairpad/
+├── backend/
+│   ├── src/
+│   │   ├── config/       # Database configuration
+│   │   ├── controllers/  # Route handlers
+│   │   ├── middleware/   # Auth middleware
+│   │   ├── models/       # Mongoose schemas
+│   │   ├── routes/       # Express routers
+│   │   ├── utils/        # Helper functions
+│   │   └── server.js     # Entry point
+│   ├── package.json
+│   └── .env.example
+├── frontend/
+│   ├── src/
+│   │   ├── context/      # Auth context
+│   │   ├── pages/        # Route components
+│   │   ├── routes/       # App routing
+│   │   ├── main.jsx      # Entry point
+│   │   └── index.css     # Global styles
+│   ├── package.json
+│   └── vite.config.js
+├── docs/
+└── README.md
+```
+
+## Environment Variables
+
+See `.env.example` in the backend directory for required variables:
+- `PORT` - Server port (default: 5000)
+- `MONGODB_URI` - MongoDB connection string
+- `JWT_SECRET` - Secret for JWT signing
+- `JWT_EXPIRES_IN` - Token expiration (default: 1d)
+- `CLIENT_URL` - Frontend URL for CORS
+
+## Development Commands
+
+- Backend: `cd backend && npm run dev`
+- Frontend: `cd frontend && npm run dev`
+- Backend production: `cd backend && npm start`
+- Frontend build: `cd frontend && npm run build`

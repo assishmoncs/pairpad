@@ -538,7 +538,7 @@ const Room = () => {
             )}
             <div className="messages-container">
               {messages.map((msg, index) => (
-                <div key={msg._id || index} className="message-item">
+                <div key={(msg._id || msg.id || index).toString()} className="message-item">
                   <div className="message-header">
                     <span className="message-sender">
                       {msg.sender?.name || 'Unknown'}

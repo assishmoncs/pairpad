@@ -14,6 +14,7 @@ const FORWARDED_EVENTS = [
   'cursor-update',
   'chat-message',
   'code-execution-result',
+  'room-deleted',
 ];
 
 const ACK_TIMEOUT_MS = 5000;

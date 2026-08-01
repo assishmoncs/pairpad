@@ -7,8 +7,12 @@ jest.mock('../src/models/Room', () => ({
   exists: jest.fn(),
 }));
 jest.mock('../src/models/User', () => ({}));
+jest.mock('../src/models/Message', () => ({
+  deleteMany: jest.fn(),
+}));
 
 const Room = require('../src/models/Room');
+const Message = require('../src/models/Message');
 const {
   createRoom,
   getUserRooms,
@@ -32,6 +36,7 @@ const createReq = (overrides = {}) => ({
   body: {},
   params: {},
   user: { _id: USER_ID },
+  app: { get: jest.fn(() => ({ to: jest.fn(() => ({ emit: jest.fn() })) })) },
   ...overrides,
 });
 
@@ -433,19 +438,34 @@ describe('deleteRoom', () => {
       message: 'Only the room owner can delete this room.',
     });
     expect(Room.deleteOne).not.toHaveBeenCalled();
+    expect(Message.deleteMany).not.toHaveBeenCalled();
   });
 
   it('deletes the room for its owner', async () => {
     Room.findOne.mockResolvedValue({
       _id: 'room-1',
       owner: { toString: () => USER_ID },
+      roomCode: 'ABC123',
     });
+    Message.deleteMany.mockResolvedValue({ deletedCount: 2 });
     Room.deleteOne.mockResolvedValue({ deletedCount: 1 });
     const res = createRes();
 
-    await deleteRoom(createReq({ params: { roomCode: 'ABC123' } }), res);
+    const emit = jest.fn();
+    const to = jest.fn(() => ({ emit }));
 
+    await deleteRoom(
+      createReq({
+        params: { roomCode: 'ABC123' },
+        app: { get: jest.fn(() => ({ to })) },
+      }),
+      res
+    );
+
+    expect(Message.deleteMany).toHaveBeenCalledWith({ room: 'room-1' });
     expect(Room.deleteOne).toHaveBeenCalledWith({ _id: 'room-1' });
+    expect(to).toHaveBeenCalledWith('room:ABC123');
+    expect(emit).toHaveBeenCalledWith('room-deleted', { roomCode: 'ABC123' });
     expect(res.json).toHaveBeenCalledWith({
       message: 'Room deleted successfully.',
     });
@@ -456,6 +476,7 @@ describe('deleteRoom', () => {
       _id: 'room-1',
       owner: { toString: () => USER_ID },
     });
+    Message.deleteMany.mockResolvedValue({ deletedCount: 0 });
     Room.deleteOne.mockRejectedValue(new Error('db down'));
     const res = createRes();
 

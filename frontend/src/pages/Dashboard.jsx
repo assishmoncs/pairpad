@@ -31,6 +31,9 @@ const Dashboard = () => {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomLanguage, setNewRoomLanguage] = useState(DEFAULT_LANGUAGE);
   const [newRoomDescription, setNewRoomDescription] = useState('');
+  const [showJoinForm, setShowJoinForm] = useState(false);
+  const [joinRoomCode, setJoinRoomCode] = useState('');
+  const [joining, setJoining] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -85,6 +88,22 @@ const Dashboard = () => {
     }
   };
 
+  const handleJoinByCode = async (e) => {
+    e.preventDefault();
+    if (!joinRoomCode.trim()) return;
+    setError('');
+    setJoining(true);
+
+    try {
+      await axios.post(`/api/rooms/${joinRoomCode.trim()}/join`);
+      navigate(`/room/${joinRoomCode.trim()}`);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to join room.'));
+    } finally {
+      setJoining(false);
+    }
+  };
+
   const handleNavigateToRoom = (roomCode) => {
     navigate(`/room/${roomCode}`);
   };
@@ -106,13 +125,43 @@ const Dashboard = () => {
         <div className="rooms-section">
           <div className="section-header">
             <h2>Your Rooms</h2>
-            <button 
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              className="btn-primary"
-            >
-              {showCreateForm ? 'Cancel' : 'Create Room'}
-            </button>
+            <div className="action-buttons" style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => {
+                  setShowCreateForm(!showCreateForm);
+                  setShowJoinForm(false);
+                }}
+                className="btn-primary"
+              >
+                {showCreateForm ? 'Cancel' : 'Create Room'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowJoinForm(!showJoinForm);
+                  setShowCreateForm(false);
+                }}
+                className="btn-secondary"
+              >
+                {showJoinForm ? 'Cancel' : 'Join Room'}
+              </button>
+            </div>
           </div>
+
+          {showJoinForm && (
+            <form onSubmit={handleJoinByCode} className="join-room-form create-room-form">
+              <FormField
+                id="joinRoomCode"
+                label="Room Code"
+                value={joinRoomCode}
+                onChange={setJoinRoomCode}
+                placeholder="Enter room code (e.g. ABC123)"
+                required
+              />
+              <button type="submit" disabled={joining} className="btn-primary">
+                {joining ? 'Joining...' : 'Join Room'}
+              </button>
+            </form>
+          )}
 
           {showCreateForm && (
             <form onSubmit={handleCreateRoom} className="create-room-form">

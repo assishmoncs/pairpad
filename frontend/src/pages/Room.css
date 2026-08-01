@@ -1,3 +1,8 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Room page — PairPad collaborative coding environment
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Page shell */
 .room-page {
   display: flex;
   flex-direction: column;
@@ -21,6 +26,8 @@
   background-color: #f8d7da;
   color: #721c24;
 }
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
 
 .room-header {
   display: flex;
@@ -60,6 +67,8 @@
   font-weight: 600;
 }
 
+/* ── Connection status badge ─────────────────────────────────────────────── */
+
 .connection-status {
   display: flex;
   align-items: center;
@@ -72,25 +81,38 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #dc3545;
+  background-color: #dc3545;   /* default: disconnected (red) */
+  flex-shrink: 0;
 }
 
 .status-dot.connected {
-  background-color: #28a745;
+  background-color: #28a745;   /* green */
+}
+
+.status-dot.reconnecting {
+  background-color: #f59e0b;   /* amber */
+  animation: pulse-amber 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
 }
 
 .error-text {
   color: #dc3545;
 }
 
-/* Main layout */
+/* ── Main layout ─────────────────────────────────────────────────────────── */
+
 .room-layout {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* Editor section */
+/* ── Editor section ──────────────────────────────────────────────────────── */
+
 .editor-section {
   flex: 1;
   display: flex;
@@ -163,7 +185,8 @@
   cursor: not-allowed;
 }
 
-/* Sidebar */
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
 .room-sidebar {
   width: 300px;
   display: flex;
@@ -193,7 +216,8 @@
   border-bottom: 1px solid #404040;
 }
 
-/* Presence section */
+/* ── Presence section ────────────────────────────────────────────────────── */
+
 .presence-section {
   flex: 0 0 auto;
   max-height: 200px;
@@ -229,7 +253,54 @@
   font-style: italic;
 }
 
-/* Chat section */
+/* ── Execution section ───────────────────────────────────────────────────── */
+
+.execution-section {
+  flex: 0 0 220px;
+  overflow: hidden;
+}
+
+.execution-result,
+.execution-error,
+.no-output,
+.chat-error {
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+}
+
+.execution-error,
+.chat-error {
+  background-color: #3a1f24;
+  border-bottom: 1px solid #5f2c35;
+}
+
+.output-section,
+.error-section {
+  margin-bottom: 0.75rem;
+}
+
+.output-section pre,
+.error-section pre {
+  margin-top: 0.35rem;
+  padding: 0.5rem;
+  overflow: auto;
+  max-height: 96px;
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  color: #d4d4d4;
+}
+
+.execution-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: #9ca3af;
+  font-size: 0.78rem;
+}
+
+/* ── Chat section ────────────────────────────────────────────────────────── */
+
 .chat-section {
   flex: 1;
   display: flex;
@@ -274,50 +345,6 @@
   font-size: 0.85rem;
   color: #cccccc;
   word-wrap: break-word;
-}
-
-.execution-section {
-  flex: 0 0 220px;
-  overflow: hidden;
-}
-
-.execution-result,
-.execution-error,
-.no-output,
-.chat-error {
-  padding: 0.75rem 1rem;
-  font-size: 0.85rem;
-}
-
-.execution-error,
-.chat-error {
-  background-color: #3a1f24;
-  border-bottom: 1px solid #5f2c35;
-}
-
-.output-section,
-.error-section {
-  margin-bottom: 0.75rem;
-}
-
-.output-section pre,
-.error-section pre {
-  margin-top: 0.35rem;
-  padding: 0.5rem;
-  overflow: auto;
-  max-height: 96px;
-  background-color: #1e1e1e;
-  border: 1px solid #404040;
-  border-radius: 4px;
-  color: #d4d4d4;
-}
-
-.execution-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  color: #9ca3af;
-  font-size: 0.78rem;
 }
 
 .chat-form {
@@ -367,7 +394,8 @@
   cursor: not-allowed;
 }
 
-/* Responsive */
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
 @media (max-width: 768px) {
   .room-header,
   .editor-toolbar {

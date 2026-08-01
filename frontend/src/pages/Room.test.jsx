@@ -27,6 +27,7 @@ vi.mock('../services/socketService', () => ({
     connect: vi.fn(),
     disconnect: vi.fn(),
     isConnected: vi.fn(() => false),
+    getCurrentRoom: vi.fn(() => null),
     waitForConnection: vi.fn(() => Promise.resolve()),
     joinRoom: vi.fn(() => Promise.resolve({ users: [{ userId: 'user-1', name: 'Ada' }] })),
     leaveRoom: vi.fn(),

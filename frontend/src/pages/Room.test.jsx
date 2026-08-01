@@ -1,6 +1,6 @@
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axios from 'axios';
 import Room, { appendUniqueMessage } from './Room';
 import socketService from '../services/socketService';
@@ -74,6 +74,40 @@ describe('appendUniqueMessage', () => {
     const messageNoId = { content: 'transient' };
     expect(appendUniqueMessage([], messageNoId)).toEqual([messageNoId]);
   });
+
+  it('lets the room owner delete the room and returns to the dashboard', async () => {
+    const ownerRoom = {
+      ...roomWithMember,
+      owner: { _id: 'user-1' },
+    };
+
+    axios.get.mockImplementation((url) => {
+      if (url === '/api/rooms/abc123') {
+        return Promise.resolve({ data: { data: { room: ownerRoom } } });
+      }
+
+      if (url === '/api/messages/room/abc123') {
+        return Promise.resolve({ data: { data: { messages: [] } } });
+      }
+
+      return Promise.reject(new Error(`Unhandled GET ${url}`));
+    });
+    axios.delete.mockResolvedValue({ data: { message: 'Room deleted successfully.' } });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderRoom();
+
+    fireEvent.click(await screen.findByRole('button', { name: /delete room/i }));
+
+    await waitFor(() => {
+      expect(axios.delete).toHaveBeenCalledWith('/api/rooms/ABC123');
+    });
+    expect(socketService.leaveRoom).toHaveBeenCalled();
+    expect(await screen.findByText('Dashboard route')).toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
 });
 
 describe('Room loading', () => {

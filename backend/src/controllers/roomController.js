@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Room = require('../models/Room');
+const Message = require('../models/Message');
 const { validateRoomName, sanitizeString } = require('../utils/validation');
 const { sendSuccess, sendError, sendValidationError } = require('../utils/apiResponse');
 const {
@@ -191,7 +192,13 @@ const deleteRoom = async (req, res) => {
       return sendError(res, 403, 'Only the room owner can delete this room.');
     }
 
-    await Room.deleteOne({ _id: room._id });
+    await Promise.all([
+      Message.deleteMany({ room: room._id }),
+      Room.deleteOne({ _id: room._id }),
+    ]);
+
+    const io = req.app.get('io');
+    io?.to(`room:${room.roomCode}`).emit('room-deleted', { roomCode: room.roomCode });
 
     sendSuccess(res, 'Room deleted successfully.');
   } catch (error) {

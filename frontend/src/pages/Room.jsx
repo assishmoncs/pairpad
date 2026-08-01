@@ -30,6 +30,7 @@ const Room = () => {
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deletingRoom, setDeletingRoom] = useState(false);
 
   // ── Socket / presence ─────────────────────────────────────────────────────
   const [connected, setConnected] = useState(false);
@@ -216,6 +217,12 @@ const Room = () => {
       }
     );
 
+    const unsubRoomDeleted = socketService.on('room-deleted', () => {
+      if (!isMountedRef.current) return;
+      setSocketError('This room was deleted. Returning to dashboard…');
+      navigate('/dashboard', { replace: true });
+    });
+
     // Consolidated cleanup: unsubscribes all listeners above
     socketCleanupRef.current = () => {
       unsubConnect();
@@ -225,6 +232,7 @@ const Room = () => {
       unsubCodeChange();
       unsubChatMessage();
       unsubExecutionResult();
+      unsubRoomDeleted();
     };
 
     // ── 2. Connect (or reuse) AFTER listeners are in place ────────────────
@@ -361,6 +369,34 @@ const Room = () => {
     }
   };
 
+  // ── Room deletion ─────────────────────────────────────────────────────────
+
+  const isRoomOwner = getUserId(room?.owner) === getUserId(user);
+
+  const handleDeleteRoom = async () => {
+    if (!room || deletingRoom) return;
+
+    const confirmed = window.confirm(
+      `Delete room "${room.name}"? This permanently removes the room and its chat history.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingRoom(true);
+    setError('');
+    try {
+      await axios.delete(`/api/rooms/${room.roomCode || roomCode}`);
+      socketService.leaveRoom();
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to delete room.'));
+    } finally {
+      if (isMountedRef.current) {
+        setDeletingRoom(false);
+      }
+    }
+  };
+
   // ── Code execution ────────────────────────────────────────────────────────
 
   const handleRunCode = async () => {
@@ -432,14 +468,29 @@ const Room = () => {
           </button>
           <h1>{room?.name}</h1>
         </div>
-        <div className="connection-status">
-          <span className={`status-dot ${connectionClass}`}></span>
-          <span>{connectionLabel}</span>
-          {socketError && !connected && (
-            <span className="error-text"> — {socketError}</span>
+        <div className="header-actions">
+          {isRoomOwner && (
+            <button
+              type="button"
+              onClick={handleDeleteRoom}
+              disabled={deletingRoom}
+              className="btn-delete-room"
+            >
+              {deletingRoom ? 'Deleting…' : 'Delete Room'}
+            </button>
           )}
+          <div className="connection-status">
+            <span className={`status-dot ${connectionClass}`}></span>
+            <span>{connectionLabel}</span>
+            {socketError && !connected && (
+              <span className="error-text"> — {socketError}</span>
+            )}
+          </div>
         </div>
+      
       </header>
+
+      {error && <div className="room-alert error-text">{error}</div>}
 
       <div className="room-layout">
         <div className="editor-section">
@@ -538,7 +589,7 @@ const Room = () => {
             )}
             <div className="messages-container">
               {messages.map((msg, index) => (
-                <div key={msg._id || index} className="message-item">
+                <div key={(msg._id || msg.id || index).toString()} className="message-item">
                   <div className="message-header">
                     <span className="message-sender">
                       {msg.sender?.name || 'Unknown'}

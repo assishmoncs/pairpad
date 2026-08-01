@@ -422,3 +422,40 @@
     max-height: 100px;
   }
 }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.btn-delete-room {
+  background-color: transparent;
+  border: 1px solid #b91c1c;
+  color: #fca5a5;
+  padding: 0.5rem 0.85rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.btn-delete-room:hover:not(:disabled) {
+  background-color: #7f1d1d;
+  color: #ffffff;
+}
+
+.btn-delete-room:disabled {
+  border-color: #404040;
+  color: #808080;
+  cursor: not-allowed;
+}
+
+.room-alert {
+  padding: 0.5rem 1.5rem;
+  background-color: #3a1f24;
+  border-bottom: 1px solid #5f2c35;
+  font-size: 0.85rem;
+}

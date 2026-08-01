@@ -26,58 +26,247 @@ const Room = () => {
   const navigate = useNavigate();
   const { user, token } = useAuth();
 
+  // ── Room data ──────────────────────────────────────────────────────────────
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // ── Socket / presence ─────────────────────────────────────────────────────
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [socketError, setSocketError] = useState('');
 
+  // ── Editor ────────────────────────────────────────────────────────────────
   const [code, setCode] = useState('// Start coding together...\n');
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [isSaving, setIsSaving] = useState(false);
   const [syncError, setSyncError] = useState('');
   const editorRef = useRef(null);
-  const socketCleanupRef = useRef(null);
 
+  // ── Chat ──────────────────────────────────────────────────────────────────
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [messagesError, setMessagesError] = useState('');
+  const messagesEndRef = useRef(null);
 
+  // ── Execution ─────────────────────────────────────────────────────────────
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
   const [executionError, setExecutionError] = useState('');
 
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const messagesEndRef = useRef(null);
-
+  // ── Refs ──────────────────────────────────────────────────────────────────
   const isRemoteChange = useRef(false);
+  // Holds the unsubscribe function for all socket listeners registered for this
+  // room session. Cleaned up before re-registering or on unmount.
+  const socketCleanupRef = useRef(null);
+  // Track whether this component is still mounted to avoid state updates after unmount.
+  const isMountedRef = useRef(true);
 
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+  // Mark unmounted on teardown
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Fetch room data whenever roomCode changes.
+  // Full disconnect on cleanup so the socket is always torn down when leaving.
   useEffect(() => {
     fetchRoom();
-    return () => {
-      socketService.disconnect();
-    };
-  }, [roomCode]);
 
-  useEffect(() => {
-    if (room && token && !socketService.isConnected()) {
-      connectToSocket();
-    }
     return () => {
+      // Clean up socket listeners first
       if (socketCleanupRef.current) {
         socketCleanupRef.current();
         socketCleanupRef.current = null;
       }
+      // Full disconnect when navigating away from this room page entirely
+      socketService.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode]);
+
+  // Connect to the socket once the room is loaded and we have a token.
+  // Cleans up listeners (but not the full socket) when room/token changes.
+  useEffect(() => {
+    if (!room || !token) return;
+
+    connectToSocket();
+
+    return () => {
+      // Clean up listeners on re-run (room/token changed, StrictMode re-mount, etc.)
+      if (socketCleanupRef.current) {
+        socketCleanupRef.current();
+        socketCleanupRef.current = null;
+      }
+      // Leave the socket room channel so the server removes us from presence,
+      // but keep the physical socket alive for reuse on the next room.
       socketService.leaveRoom();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room, token]);
+
+  // ── Socket setup ──────────────────────────────────────────────────────────
+
+  /**
+   * Set up all socket listeners and connect (or re-use an existing connection).
+   *
+   * CRITICAL ORDER: listeners MUST be registered before connect() is called so
+   * the 'connect' event is never missed on fast / already-connected sockets.
+   */
+  const connectToSocket = async () => {
+    // Guard against double-registration (React StrictMode, dependency re-runs)
+    if (socketCleanupRef.current) {
+      socketCleanupRef.current();
+      socketCleanupRef.current = null;
+    }
+
+    setSocketError('');
+    setReconnecting(false);
+
+    // ── 1. Register all listeners BEFORE connect() ─────────────────────────
+
+    // Connected (initial or after reconnect)
+    const unsubConnect = socketService.on('connect', async () => {
+      if (!isMountedRef.current) return;
+      setConnected(true);
+      setReconnecting(false);
+      setSocketError('');
+
+      // Re-join the room after a reconnect so presence is restored.
+      // On the very first connect this is a no-op (joinRoom is called below).
+      const currentRoom = socketService.getCurrentRoom();
+      if (currentRoom) {
+        try {
+          const joinResponse = await socketService.joinRoom(currentRoom);
+          if (isMountedRef.current && joinResponse.users) {
+            setOnlineUsers(joinResponse.users);
+          }
+        } catch (err) {
+          console.error('[Room] Failed to rejoin room on reconnect:', err.message);
+          if (isMountedRef.current) {
+            setSocketError('Reconnected, but could not rejoin room: ' + err.message);
+          }
+        }
+      }
+    });
+
+    // Disconnected (may reconnect automatically)
+    const unsubDisconnect = socketService.on('disconnect', ({ reason } = {}) => {
+      if (!isMountedRef.current) return;
+      setConnected(false);
+      // Only show "Reconnecting" for transient drops; if it was intentional
+      // (io client/server disconnect) we leave it as plain disconnected.
+      const intentional =
+        reason === 'io client disconnect' || reason === 'io server disconnect';
+      setReconnecting(!intentional);
+    });
+
+    // Connection error (transient; socket keeps retrying)
+    const unsubError = socketService.on('connect_error', ({ error: errMsg } = {}) => {
+      if (!isMountedRef.current) return;
+      console.warn('[Room] connect_error:', errMsg);
+      // Don't override a successful connected state with an error badge
+      // (error may fire in parallel with a successful reconnect).
+    });
+
+    // Presence updates from the server
+    const unsubPresence = socketService.on('presence-update', ({ users }) => {
+      if (!isMountedRef.current) return;
+      setOnlineUsers(users || []);
+    });
+
+    // Remote code changes
+    const unsubCodeChange = socketService.on(
+      'code-change',
+      ({ content, language: nextLanguage }) => {
+        if (!isMountedRef.current) return;
+        isRemoteChange.current = true;
+        setCode(content);
+        if (nextLanguage) {
+          setLanguage(nextLanguage);
+        }
+        // Reset flag after the current render cycle
+        setTimeout(() => {
+          isRemoteChange.current = false;
+        }, 0);
+      }
+    );
+
+    // Incoming chat messages (deduplicated)
+    const unsubChatMessage = socketService.on('chat-message', (message) => {
+      if (!isMountedRef.current) return;
+      setMessages((prev) => appendUniqueMessage(prev, message));
+    });
+
+    // Code execution results broadcast by the server
+    const unsubExecutionResult = socketService.on(
+      'code-execution-result',
+      ({ result }) => {
+        if (!isMountedRef.current) return;
+        setExecutionResult(result);
+        if (result.status !== 'success' && result.stderr) {
+          setExecutionError(result.stderr);
+        }
+      }
+    );
+
+    // Consolidated cleanup: unsubscribes all listeners above
+    socketCleanupRef.current = () => {
+      unsubConnect();
+      unsubDisconnect();
+      unsubError();
+      unsubPresence();
+      unsubCodeChange();
+      unsubChatMessage();
+      unsubExecutionResult();
+    };
+
+    // ── 2. Connect (or reuse) AFTER listeners are in place ────────────────
+    try {
+      socketService.connect(token);
+
+      await socketService.waitForConnection();
+
+      if (!isMountedRef.current) return;
+      setConnected(true);
+
+      // ── 3. Join the room channel ─────────────────────────────────────────
+      try {
+        const joinResponse = await socketService.joinRoom(roomCode);
+        if (isMountedRef.current && joinResponse.users) {
+          setOnlineUsers(joinResponse.users);
+        }
+      } catch (joinError) {
+        if (isMountedRef.current) {
+          setSocketError('Failed to join room: ' + joinError.message);
+        }
+      }
+
+      // ── 4. Load chat history ─────────────────────────────────────────────
+      await fetchMessages();
+    } catch (err) {
+      console.error('[Room] Socket connection failed:', err.message);
+      if (isMountedRef.current) {
+        setSocketError('Could not connect to collaboration server. Retrying…');
+        setReconnecting(true);
+      }
+    }
+  };
+
+  // ── Room data ─────────────────────────────────────────────────────────────
 
   const fetchRoom = async () => {
     try {
       const response = await axios.get(`/api/rooms/${roomCode}`);
       const roomData = response.data.data.room;
+
+      if (!isMountedRef.current) return;
       setRoom(roomData);
       setLanguage(roomData.language || DEFAULT_LANGUAGE);
 
@@ -89,114 +278,43 @@ const Room = () => {
       if (!isMember) {
         await axios.post(`/api/rooms/${roomCode}/join`);
         const updatedResponse = await axios.get(`/api/rooms/${roomCode}`);
-        setRoom(updatedResponse.data.data.room);
+        if (isMountedRef.current) {
+          setRoom(updatedResponse.data.data.room);
+        }
       }
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load room.'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const connectToSocket = async () => {
-    try {
-      setSocketError('');
-
-      socketService.connect(token);
-
-      const unsubConnect = socketService.on('connect', () => {
-        setConnected(true);
-      });
-
-      const unsubDisconnect = socketService.on('disconnect', () => {
-        setConnected(false);
-      });
-
-      const unsubError = socketService.on('connect_error', ({ error: errMsg }) => {
-        setSocketError(errMsg);
-      });
-
-      const unsubPresence = socketService.on('presence-update', ({ users }) => {
-        setOnlineUsers(users || []);
-      });
-
-      const unsubCodeChange = socketService.on(
-        'code-change',
-        ({ content, language: nextLanguage }) => {
-          isRemoteChange.current = true;
-          setCode(content);
-          if (nextLanguage) {
-            setLanguage(nextLanguage);
-          }
-          setTimeout(() => {
-            isRemoteChange.current = false;
-          }, 0);
-        }
-      );
-
-      const unsubChatMessage = socketService.on('chat-message', (message) => {
-        setMessages((prev) => appendUniqueMessage(prev, message));
-      });
-
-      const unsubExecutionResult = socketService.on(
-        'code-execution-result',
-        ({ result }) => {
-          setExecutionResult(result);
-          if (result.status !== 'success' && result.stderr) {
-            setExecutionError(result.stderr);
-          }
-        }
-      );
-
-      socketCleanupRef.current = () => {
-        unsubConnect();
-        unsubDisconnect();
-        unsubError();
-        unsubPresence();
-        unsubCodeChange();
-        unsubChatMessage();
-        unsubExecutionResult();
-      };
-
-      await socketService.waitForConnection();
-      setConnected(true);
-
-      try {
-        const joinResponse = await socketService.joinRoom(roomCode);
-        if (joinResponse.users) {
-          setOnlineUsers(joinResponse.users);
-        }
-      } catch (joinError) {
-        setSocketError('Failed to join room: ' + joinError.message);
+      if (isMountedRef.current) {
+        setError(getErrorMessage(err, 'Failed to load room.'));
       }
-
-      await fetchMessages();
-    } catch (error) {
-      console.error('[Room] Socket connection error:', error);
-      setSocketError('Failed to connect to collaboration server.');
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
+
+  // ── Chat history ──────────────────────────────────────────────────────────
 
   const fetchMessages = async () => {
     try {
       const response = await axios.get(`/api/messages/room/${roomCode}`);
+      if (!isMountedRef.current) return;
       setMessages(response.data.data.messages || []);
       setMessagesError('');
-    } catch (error) {
-      console.error('[Room] Failed to fetch messages:', error);
-      setMessagesError(
-        error.response?.data?.message || 'Failed to load chat history.'
-      );
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      console.error('[Room] Failed to fetch messages:', err);
+      setMessagesError(err.response?.data?.message || 'Failed to load chat history.');
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-  };
+  // ── Scroll to bottom on new messages ─────────────────────────────────────
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages]);
+
+  // ── Editor handlers ───────────────────────────────────────────────────────
 
   const handleEditorMount = (editor) => {
     editorRef.current = editor;
@@ -206,18 +324,16 @@ const Room = () => {
     async (value) => {
       setCode(value);
 
-      if (isRemoteChange.current) {
-        return;
-      }
+      if (isRemoteChange.current) return;
 
       setIsSaving(true);
       try {
         await socketService.sendCodeChange(value, language);
         setSyncError('');
-      } catch (error) {
-        console.error('[Room] Failed to send code change:', error);
+      } catch (err) {
+        console.error('[Room] Failed to send code change:', err);
         setSyncError(
-          error.message || 'Failed to sync your changes. Collaborators may not see them.'
+          err.message || 'Failed to sync your changes. Collaborators may not see them.'
         );
       } finally {
         setIsSaving(false);
@@ -225,6 +341,8 @@ const Room = () => {
     },
     [language]
   );
+
+  // ── Chat send ─────────────────────────────────────────────────────────────
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -235,13 +353,15 @@ const Room = () => {
     try {
       await socketService.sendChatMessage(newMessage.trim());
       setNewMessage('');
-    } catch (error) {
-      console.error('[Room] Failed to send message:', error);
-      setMessagesError('Failed to send message: ' + (error.message || 'Unknown error'));
+    } catch (err) {
+      console.error('[Room] Failed to send message:', err);
+      setMessagesError('Failed to send message: ' + (err.message || 'Unknown error'));
     } finally {
       setSendingMessage(false);
     }
   };
+
+  // ── Code execution ────────────────────────────────────────────────────────
 
   const handleRunCode = async () => {
     setExecuting(true);
@@ -261,13 +381,15 @@ const Room = () => {
       if (result.status !== 'success' && result.stderr) {
         setExecutionError(result.stderr);
       }
-    } catch (error) {
-      console.error('[Room] Failed to execute code:', error);
-      setExecutionError(getErrorMessage(error, 'Failed to execute code.'));
+    } catch (err) {
+      console.error('[Room] Failed to execute code:', err);
+      setExecutionError(getErrorMessage(err, 'Failed to execute code.'));
     } finally {
       setExecuting(false);
     }
   };
+
+  // ── Render guards ─────────────────────────────────────────────────────────
 
   if (loading) {
     return <div className="room-page loading">Loading room...</div>;
@@ -285,6 +407,22 @@ const Room = () => {
     );
   }
 
+  // ── Connection status badge ───────────────────────────────────────────────
+
+  const connectionLabel = connected
+    ? 'Connected'
+    : reconnecting
+      ? 'Reconnecting…'
+      : 'Disconnected';
+
+  const connectionClass = connected
+    ? 'connected'
+    : reconnecting
+      ? 'reconnecting'
+      : 'disconnected';
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div className="room-page">
       <header className="room-header">
@@ -295,11 +433,11 @@ const Room = () => {
           <h1>{room?.name}</h1>
         </div>
         <div className="connection-status">
-          <span
-            className={`status-dot ${connected ? 'connected' : 'disconnected'}`}
-          ></span>
-          <span>{connected ? 'Connected' : 'Disconnected'}</span>
-          {socketError && <span className="error-text"> - {socketError}</span>}
+          <span className={`status-dot ${connectionClass}`}></span>
+          <span>{connectionLabel}</span>
+          {socketError && !connected && (
+            <span className="error-text"> — {socketError}</span>
+          )}
         </div>
       </header>
 
@@ -345,7 +483,7 @@ const Room = () => {
             <h3>Online Users ({onlineUsers.length})</h3>
             <ul className="users-list">
               {onlineUsers.map((u) => (
-                <li key={u.userId || u.socketId} className="user-item">
+                <li key={u.socketId || u.userId} className="user-item">
                   <span className="user-dot"></span>
                   {u.name || 'Anonymous'}
                 </li>

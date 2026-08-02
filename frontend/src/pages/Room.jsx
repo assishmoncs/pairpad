@@ -7,7 +7,17 @@ import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../utils/apiError';
 import { DEFAULT_LANGUAGE } from '../constants/languages';
 import LanguageSelect from '../components/LanguageSelect';
+import LoadingSpinner from '../components/LoadingSpinner';
 import './Room.css';
+
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const getUserId = (u) => (u?._id || u?.id || '').toString();
 const getMessageKey = (message) => message?._id || null;
@@ -32,6 +42,9 @@ const Room = () => {
   const [error, setError] = useState('');
   const [deletingRoom, setDeletingRoom] = useState(false);
 
+  // ── UI feedback ───────────────────────────────────────────────────────────
+  const [copiedCode, setCopiedCode] = useState(false);
+
   // ── Socket / presence ─────────────────────────────────────────────────────
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -54,6 +67,8 @@ const Room = () => {
 
   // ── Execution ─────────────────────────────────────────────────────────────
   const [executing, setExecuting] = useState(false);
+  const [stdin, setStdin] = useState('');
+  const [showStdin, setShowStdin] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
   const [executionError, setExecutionError] = useState('');
 
@@ -277,6 +292,9 @@ const Room = () => {
       if (!isMountedRef.current) return;
       setRoom(roomData);
       setLanguage(roomData.language || DEFAULT_LANGUAGE);
+      if (roomData.snapshotCode !== undefined && roomData.snapshotCode !== '') {
+        setCode(roomData.snapshotCode);
+      }
 
       const currentId = getUserId(user);
       const isMember =
@@ -409,6 +427,7 @@ const Room = () => {
         source_code: code,
         language: language,
         roomCode: roomCode,
+        stdin: stdin,
       });
 
       const result = response.data.data.result;
@@ -428,7 +447,11 @@ const Room = () => {
   // ── Render guards ─────────────────────────────────────────────────────────
 
   if (loading) {
-    return <div className="room-page loading">Loading room...</div>;
+    return (
+      <div className="room-page loading">
+        <LoadingSpinner label="Connecting to collaboration room..." size="large" />
+      </div>
+    );
   }
 
   if (error && !room) {
@@ -459,14 +482,35 @@ const Room = () => {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const handleCopyRoomCode = async () => {
+    const success = await copyToClipboard(room?.roomCode || roomCode);
+    if (success) {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
   return (
     <div className="room-page">
       <header className="room-header">
         <div className="header-left">
           <button onClick={() => navigate('/dashboard')} className="btn-back">
-            Back to Dashboard
+            ← Dashboard
           </button>
           <h1>{room?.name}</h1>
+          {room?.roomCode && (
+            <button
+              type="button"
+              onClick={handleCopyRoomCode}
+              className="btn-room-code"
+              title="Click to copy room code"
+            >
+              {room.roomCode}
+              <span className="room-code-copy-hint">
+                {copiedCode ? ' ✓ Copied!' : ' · Copy'}
+              </span>
+            </button>
+          )}
         </div>
         <div className="header-actions">
           {isRoomOwner && (
@@ -487,7 +531,6 @@ const Room = () => {
             )}
           </div>
         </div>
-      
       </header>
 
       {error && <div className="room-alert error-text">{error}</div>}
@@ -546,7 +589,29 @@ const Room = () => {
           </div>
 
           <div className="sidebar-section execution-section">
-            <h3>Execution Output</h3>
+            <div className="section-title-row">
+              <h3>Execution Output</h3>
+              <button
+                type="button"
+                onClick={() => setShowStdin(!showStdin)}
+                className="btn-toggle-stdin"
+                title="Configure standard input for code execution"
+              >
+                {showStdin ? 'Hide Stdin' : 'Input (Stdin)'}
+              </button>
+            </div>
+            {showStdin && (
+              <div className="stdin-container">
+                <label htmlFor="stdin-input">Standard Input (stdin):</label>
+                <textarea
+                  id="stdin-input"
+                  value={stdin}
+                  onChange={(e) => setStdin(e.target.value)}
+                  placeholder="Enter input for your program..."
+                  rows={3}
+                />
+              </div>
+            )}
             {executionError && (
               <div className="execution-error">
                 <strong>Error:</strong> {executionError}

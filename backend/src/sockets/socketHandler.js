@@ -15,6 +15,7 @@
  */
 
 const Message = require('../models/Message');
+const Room = require('../models/Room');
 const { getUserFromToken } = require('../utils/tokenAuth');
 const {
   findRoomByCode,
@@ -202,6 +203,19 @@ const initializeSocket = (io) => {
       if (content === undefined) {
         return callback?.({ error: 'Content is required.' });
       }
+
+      // Persist snapshot to room document asynchronously (non-blocking)
+      Room.updateOne(
+        { roomCode: socket.currentRoom },
+        {
+          $set: {
+            snapshotCode: content,
+            ...(language ? { language } : {}),
+          },
+        }
+      ).catch((err) =>
+        console.error('[Socket] Failed to update code snapshot:', err.message)
+      );
       
       // Broadcast to other users in the room (not sender)
       socket.to(`room:${socket.currentRoom}`).emit('code-change', {
@@ -269,12 +283,14 @@ const initializeSocket = (io) => {
         const populatedMessage = await Message.findById(message._id)
           .populate('sender', 'name email');
         
-        // Broadcast to all users in room (including sender for confirmation)
+        // Broadcast to all users in room (including sender for confirmation).
+        // IDs are stringified so the frontend deduplication (appendUniqueMessage)
+        // can compare them with strict equality.
         io.to(`room:${socket.currentRoom}`).emit('chat-message', {
-          _id: populatedMessage._id,
+          _id: populatedMessage._id.toString(),
           content: populatedMessage.content,
           sender: {
-            _id: populatedMessage.sender?._id || socket.user._id,
+            _id: (populatedMessage.sender?._id || socket.user._id).toString(),
             name: populatedMessage.sender?.name || socket.user.name,
             email: populatedMessage.sender?.email || socket.user.email || '',
           },

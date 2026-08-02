@@ -38,6 +38,10 @@ const roomSchema = new mongoose.Schema(
       trim: true,
       maxlength: [200, 'Description cannot exceed 200 characters'],
     },
+    snapshotCode: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,

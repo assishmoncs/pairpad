@@ -9,9 +9,9 @@ Browser (React + Monaco)
         |
         |  REST (/api/*)  +  WebSocket (Socket.IO)
         v
-Express + Socket.IO  ----  MongoDB
+Express + Socket.IO (Helmet + Rate Limiting) ---- MongoDB (Users, Rooms, Messages)
         |
-        +---- Judge0 (code execution)
+        +---- Judge0 API (Primary) / Local Node & Python Runner (Fallback)
 ```
 
 ## Core Components
@@ -19,56 +19,58 @@ Express + Socket.IO  ----  MongoDB
 ### Frontend
 - Auth pages (login, register) and JWT stored in `localStorage`
 - Dashboard for creating and opening rooms
-- Room page: Monaco editor, presence list, chat, run-code output
+- Room page: Monaco editor, presence list, chat, stdin input, code execution output, and room code copy pill
 - `AuthContext` + Axios defaults for `Authorization` header
-- Socket client service for realtime events
+- `SocketService` singleton for real-time connection management, auto-reconnect, and event bus
+- `LoadingSpinner` and `NotFound` (404) components for smooth UX feedback
 
 ### Backend API
-- JWT authentication (register, login, `/me`)
-- Room lifecycle (create, join, leave, delete)
-- Chat message history
-- Code execution via Judge0 wrapper
-- Rate limiting on auth and execute routes
-- Centralized error handling
+- Security headers enforced via `helmet` and rate limiting (`apiLimiter`, `authLimiter`, `executeLimiter`)
+- JWT authentication (register, login, `/me` with session unavailability handling)
+- Room lifecycle (create, join, leave, delete with socket broadcast)
+- Chat message history (MongoDB backed)
+- Code execution via Judge0 wrapper with automatic local Node.js / Python runner fallback
+- Centralized error handling middleware
 
 ### Realtime Layer (Socket.IO)
 - JWT required on handshake
-- Room membership checked before join
-- Events: `join-room`, `leave-room`, `code-change`, `cursor-update`, `chat-message`
+- Room membership verified before join
+- Events: `join-room`, `leave-room`, `code-change`, `cursor-update`, `chat-message`, `code-execution-result`, `room-deleted`
 - Presence broadcast on join/leave/disconnect
-- Chat messages persisted to MongoDB then broadcast
+- Asynchronous editor `snapshotCode` persistence to MongoDB on `code-change`
+- Chat messages persisted to MongoDB then broadcast with stringified IDs
 
 ### Database (MongoDB + Mongoose)
 - **User** — name, email (unique), hashed password
-- **Room** — name, roomCode, owner, members, language, description
+- **Room** — name, roomCode, owner, members, language, description, snapshotCode
 - **Message** — room, sender, content
 
-### Code Execution (Judge0)
-- Server-side only (API key never sent to the client)
-- Language map for JS, TS, Python, Java, C/C++, Go, Rust, and others
-- Optional broadcast of results to the Socket.IO room
+### Code Execution
+- Server-side only (API key never exposed to client)
+- Primary: Judge0 CE API supporting JS, TS, Python, Java, C/C++, Go, Rust, PHP, Ruby
+- Fallback: Local sandboxed runner for JS, TS, and Python with 5s execution timeout and 1MB buffer cap
+- Supports custom `stdin` inputs passed from the frontend UI
 
 ## Data Flow
 
 1. User registers or logs in → JWT returned and stored client-side.
-2. User creates or joins a room via REST.
-3. Room page connects Socket.IO with the JWT and joins the room channel.
-4. Monaco edits emit `code-change`; peers apply updates (full-document sync MVP).
-5. Chat messages are saved and broadcast.
-6. Run Code posts to `/api/execute`; Judge0 result is returned (and may be broadcast).
+2. User creates or opens a room via REST; room data (including saved `snapshotCode`) is fetched.
+3. Room page connects Socket.IO with JWT and joins the room channel.
+4. Monaco edits emit `code-change`; peers receive updates, and room `snapshotCode` is persisted to DB.
+5. Chat messages are saved to MongoDB and broadcast with stringified IDs.
+6. Run Code posts to `/api/execute` with code and optional `stdin`; execution output is returned and broadcast.
 
 ## MVP Limitations
 
-- **Conflict resolution:** last-write-wins full document sync (not CRDT/OT yet).
-- **Scaling:** in-memory presence; no Redis adapter for multi-instance Socket.IO.
-- **Persistence:** editor buffer is not snapshotted to the room document on every change.
-- **Cursors:** server supports cursor events; client coloring is minimal.
+- **Conflict resolution:** last-write-wins full document sync (CRDT/OT planned).
+- **Scaling:** in-memory presence; no Redis adapter for multi-instance Socket.IO scaling.
+- **Cursors:** server supports cursor events; client rendering is minimal.
 
 ## Roadmap
 
 - CRDT or OT for conflict-safe concurrent editing
 - Role-based permissions (owner / editor / viewer)
-- Persist editor snapshots and session replay
+- Session replay and historical revisions
 - Redis adapter for horizontal Socket.IO scaling
 - Docker Compose + CI pipeline
 - Interview tooling (timer, question packs, test cases)

@@ -1,5 +1,5 @@
 jest.mock('../src/models/User', () => ({ findById: jest.fn() }));
-jest.mock('../src/models/Room', () => ({ findOne: jest.fn() }));
+jest.mock('../src/models/Room', () => ({ findOne: jest.fn(), updateOne: jest.fn().mockReturnValue(Promise.resolve({})) }));
 jest.mock('../src/models/Message', () => ({ create: jest.fn(), findById: jest.fn() }));
 
 const jwt = require('jsonwebtoken');

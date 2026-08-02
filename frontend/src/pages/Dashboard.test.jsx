@@ -86,21 +86,19 @@ describe('Dashboard', () => {
     expect(screen.getAllByText(/code:/i)).toHaveLength(1);
   });
 
-  it('joins a room and navigates to the room route', async () => {
+  it('opens an existing room by navigating to its route', async () => {
     axios.get.mockResolvedValue({
       data: { data: { rooms: [existingRoom] } },
     });
-    axios.post.mockResolvedValue({ data: { data: {} } });
 
     renderDashboard();
 
     expect(await screen.findByText('Existing Room')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /^join$/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^open room$/i }));
 
-    await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledWith('/api/rooms/ABC123/join');
-    });
     expect(await screen.findByRole('heading', { name: /room route/i })).toBeInTheDocument();
+    // Navigation is handled client-side — no join POST for an already-joined room
+    expect(axios.post).not.toHaveBeenCalledWith('/api/rooms/ABC123/join');
   });
 
   it('toggles the join room form and redirects to correct route upon submitting room code', async () => {

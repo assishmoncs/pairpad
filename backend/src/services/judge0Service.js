@@ -272,8 +272,12 @@ function formatResult(result) {
     6: 'memory_limit_exceeded',
     7: 'compilation_error',
     8: 'runtime_error',
-    9: 'runtime_error', // NZE
-    10: 'compile_error', // RTE
+    9: 'runtime_error',   // Non-zero exit (NZE)
+    10: 'runtime_error',  // Internal error / RTE
+    11: 'output_limit_exceeded',
+    12: 'memory_limit_exceeded',
+    13: 'time_limit_exceeded',
+    14: 'exec_format_error',
   };
 
   return {

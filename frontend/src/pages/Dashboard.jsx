@@ -7,6 +7,8 @@ import { DEFAULT_LANGUAGE } from '../constants/languages';
 import LanguageSelect from '../components/LanguageSelect';
 import FormField from '../components/FormField';
 
+import LoadingSpinner from '../components/LoadingSpinner';
+
 const getRoomKey = (room) => room?._id || room?.roomCode;
 
 const isSameRoom = (left, right) => {
@@ -109,7 +111,11 @@ const Dashboard = () => {
   };
 
   if (loading) {
-    return <div className="dashboard loading">Loading dashboard...</div>;
+    return (
+      <div className="dashboard loading">
+        <LoadingSpinner label="Loading dashboard..." size="large" />
+      </div>
+    );
   }
 
   return (
@@ -212,13 +218,7 @@ const Dashboard = () => {
                       onClick={() => handleNavigateToRoom(room.roomCode)}
                       className="btn-primary"
                     >
-                      Open
-                    </button>
-                    <button 
-                      onClick={() => handleJoinRoom(room.roomCode)}
-                      className="btn-secondary"
-                    >
-                      Join
+                      Open Room
                     </button>
                   </div>
                 </div>

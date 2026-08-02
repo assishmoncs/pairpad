@@ -4,6 +4,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const http = require('http');
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
@@ -40,6 +41,14 @@ const corsOptions = {
   },
   credentials: true,
 };
+
+// Security headers with Helmet
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Disabled to prevent blocking dev tools & WebSocket connections
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 app.use(cors(corsOptions));
 

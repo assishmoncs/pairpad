@@ -102,4 +102,31 @@ describe('Dashboard', () => {
     });
     expect(await screen.findByRole('heading', { name: /room route/i })).toBeInTheDocument();
   });
+
+  it('toggles the join room form and redirects to correct route upon submitting room code', async () => {
+    axios.get.mockResolvedValue({
+      data: { data: { rooms: [] } },
+    });
+    axios.post.mockResolvedValue({ data: { data: {} } });
+
+    renderDashboard();
+
+    // Verify Join Room form toggle
+    const joinButton = await screen.findByRole('button', { name: /^join room$/i });
+    expect(screen.queryByLabelText(/room code/i)).not.toBeInTheDocument();
+
+    await userEvent.click(joinButton);
+    expect(screen.getByLabelText(/room code/i)).toBeInTheDocument();
+
+    // Fill in room code and submit
+    await userEvent.type(screen.getByLabelText(/room code/i), 'XYZ789');
+
+    const submitBtn = screen.getByRole('button', { name: /^join room$/i, type: 'submit' });
+    await userEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith('/api/rooms/XYZ789/join');
+    });
+    expect(await screen.findByRole('heading', { name: /room route/i })).toBeInTheDocument();
+  });
 });

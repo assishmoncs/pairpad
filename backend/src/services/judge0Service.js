@@ -1,11 +1,27 @@
-// Judge0 service for code execution
-// Calls Judge0 CE API (self-hosted or RapidAPI) to execute code safely
+// Judge0 service for code execution.
+// Calls Judge0 CE API (self-hosted or RapidAPI) to execute code safely.
+//
+// SECURITY NOTE: the Judge0 path executes user code inside Judge0's isolated
+// runner. The local fallback (executeLocally) runs user code on THIS host, so
+// it is strictly gated: it is disabled in production unless ALLOW_LOCAL_EXECUTION
+// is explicitly 'true', and even then it runs in a scrubbed environment with
+// resource limits. In production prefer a fully isolated runner (container /
+// Judge0) and leave ALLOW_LOCAL_EXECUTION unset.
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { spawn } = require('child_process');
+const logger = require('../utils/logger');
 
 const JUDGE0_BASE_URL = process.env.JUDGE0_BASE_URL || 'https://judge0-ce.p.rapidapi.com';
 const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY;
 const JUDGE0_RAPIDAPI_HOST = process.env.JUDGE0_RAPIDAPI_HOST || 'judge0-ce.p.rapidapi.com';
+
+const EXEC_TIMEOUT_MS = 5000;
+const MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
+const MAX_HEAP_MB = 128;
 
 // Language ID mapping for Judge0
 // See: https://judge0.com/docs/
@@ -24,15 +40,39 @@ const LANGUAGE_MAP = {
   typescript: 74,      // TypeScript (5.0.3)
 };
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { execFile } = require('child_process');
+const hasJudge0Key = () => JUDGE0_API_KEY && !JUDGE0_API_KEY.startsWith('replace-with');
+
+/**
+ * Whether the unsandboxed local runner may be used.
+ * Dev environments default to allowed (no key => local fallback). Production
+ * requires an explicit opt-in, because local execution is NOT a security
+ * boundary and must only run where the host is disposable/isolated.
+ */
+const isLocalExecutionAllowed = () => {
+  if (process.env.ALLOW_LOCAL_EXECUTION === 'false') return false;
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.ALLOW_LOCAL_EXECUTION === 'true';
+  }
+  return true;
+};
+
+/** Environment for child processes: explicit allowlist, secrets never inherited. */
+function buildChildEnv() {
+  return {
+    PATH: process.env.PATH || '/usr/bin:/bin:/usr/local/bin',
+    HOME: process.env.HOME || os.homedir(),
+    TMPDIR: os.tmpdir(),
+    TMP: os.tmpdir(),
+    TEMP: os.tmpdir(),
+    LANG: process.env.LANG || 'C.UTF-8',
+    LC_ALL: process.env.LC_ALL || 'C.UTF-8',
+  };
+}
 
 // Shared axios config for every Judge0 call
 const judge0RequestConfig = (extraHeaders = {}) => {
   const headers = { ...extraHeaders };
-  if (JUDGE0_API_KEY && !JUDGE0_API_KEY.startsWith('replace-with')) {
+  if (hasJudge0Key()) {
     headers['X-RapidAPI-Key'] = JUDGE0_API_KEY;
     headers['X-RapidAPI-Host'] = JUDGE0_RAPIDAPI_HOST;
   }
@@ -48,9 +88,22 @@ const judge0RequestConfig = (extraHeaders = {}) => {
 /**
  * Fallback runner for local execution when Judge0 is unconfigured or unavailable.
  * Supports JavaScript, TypeScript, and Python.
+ *
+ * Hardening:
+ *  - runs in a scrubbed environment (no app secrets inherited),
+ *  - caps heap, output buffer, and wall-clock time,
+ *  - pipes stdin/stdout/stderr through isolated streams.
+ * Note: this is a *resource* guard, NOT a full security sandbox (no container/
+ * seccomp/cgroups). Keep it disabled in production (see isLocalExecutionAllowed).
  */
 async function executeLocally(sourceCode, language, stdin = '') {
   const lang = (language || '').toLowerCase();
+
+  if (!isLocalExecutionAllowed()) {
+    logger.warn('Local code execution blocked by configuration', { language });
+    return null;
+  }
+
   const startTime = Date.now();
   const tmpDir = os.tmpdir();
   const filename = `pairpad_exec_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -62,6 +115,7 @@ async function executeLocally(sourceCode, language, stdin = '') {
   if (lang === 'javascript' || lang === 'typescript') {
     cmd = 'node';
     fileExt = '.js';
+    args = ['--max-old-space-size=' + MAX_HEAP_MB];
   } else if (lang === 'python' || lang === 'python3') {
     cmd = process.platform === 'win32' ? 'python' : 'python3';
     fileExt = '.py';
@@ -71,59 +125,131 @@ async function executeLocally(sourceCode, language, stdin = '') {
 
   const filePath = path.join(tmpDir, filename + fileExt);
 
+  let stdout = '';
+  let stderr = '';
+  let exceededBuffer = false;
+
   try {
     await fs.promises.writeFile(filePath, sourceCode, 'utf8');
-    args = [filePath];
   } catch (err) {
+    logger.error('Failed to stage local execution file', { message: err.message });
     return null;
   }
 
+  args = args.concat([filePath]);
+
   return new Promise((resolve) => {
-    const child = execFile(
-      cmd,
-      args,
-      {
-        timeout: 5000,
-        maxBuffer: 1024 * 1024,
+    let settled = false;
+    let timedOut = false;
+
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      fs.promises.unlink(filePath).catch(() => {});
+      resolve(payload);
+    };
+
+    const child = spawn(cmd, args, {
+      env: buildChildEnv(),
+      stdio: ['pipe', 'pipe', 'pipe'],
+      // Kill if the process does not exit within the timeout.
+      timeout: EXEC_TIMEOUT_MS,
+      // V8 heap / string resource limits (applies to Node; no-op elsewhere).
+      resourceLimits: {
+        maxOldGenerationSizeMb: MAX_HEAP_MB,
+        maxYoungGenerationSizeMb: 16,
+        maxStringLength: MAX_OUTPUT_BYTES,
       },
-      async (error, stdout, stderr) => {
-        try {
-          await fs.promises.unlink(filePath);
-        } catch (_) {}
+    });
 
-        const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+    child.stdout.on('data', (chunk) => {
+      if (stdout.length + chunk.length <= MAX_OUTPUT_BYTES) stdout += chunk;
+      else exceededBuffer = true;
+    });
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length + chunk.length <= MAX_OUTPUT_BYTES) stderr += chunk;
+      else exceededBuffer = true;
+    });
 
-        if (error && error.killed) {
-          return resolve({
-            stdout: stdout || '',
-            stderr: 'Execution timed out after 5.000s',
-            output: stdout || '',
-            status: 'time_limit_exceeded',
-            statusCode: 5,
-            time: '5.000s',
-            memory: 'N/A',
-            exitCode: null,
-            signal: 'SIGTERM',
-          });
-        }
+    child.on('error', (err) => {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+      finish({
+        stdout,
+        stderr: stderr || err.message,
+        output: stdout,
+        status: 'runtime_error',
+        statusCode: 8,
+        time: `${duration}s`,
+        memory: 'N/A',
+        exitCode: 1,
+        signal: null,
+      });
+    });
 
-        const isError = !!error;
-        resolve({
-          stdout: stdout || '',
-          stderr: stderr || (isError ? error.message : ''),
-          output: stdout || '',
-          status: isError ? 'runtime_error' : 'success',
-          statusCode: isError ? 8 : 3,
-          time: `${duration}s`,
+    child.on('timeout', () => {
+      timedOut = true;
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // The child already exited; nothing to do.
+      }
+    });
+
+    child.on('exit', (code, signal) => {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+
+      if (timedOut) {
+        return finish({
+          stdout,
+          stderr: exceededBuffer
+            ? `Execution timed out after ${(EXEC_TIMEOUT_MS / 1000).toFixed(3)}s (output exceeded ${MAX_OUTPUT_BYTES} bytes).`
+            : `Execution timed out after ${(EXEC_TIMEOUT_MS / 1000).toFixed(3)}s`,
+          output: stdout,
+          status: 'time_limit_exceeded',
+          statusCode: 5,
+          time: '5.000s',
           memory: 'N/A',
-          exitCode: error ? error.code || 1 : 0,
-          signal: null,
+          exitCode: null,
+          signal: 'SIGTERM',
         });
       }
-    );
+
+      if (exceededBuffer) {
+        const extra = stderr ? `\n${stderr}` : '';
+        stderr = `${stderr || ''}Output exceeded ${MAX_OUTPUT_BYTES} bytes.${extra}`.trim();
+      }
+
+      if (code === 0) {
+        finish({
+          stdout,
+          stderr,
+          output: stdout,
+          status: 'success',
+          statusCode: 3,
+          time: `${duration}s`,
+          memory: 'N/A',
+          exitCode: 0,
+          signal: null,
+        });
+      } else {
+        finish({
+          stdout,
+          stderr: stderr || `Process exited with code ${code || 1}`,
+          output: stdout,
+          status: 'runtime_error',
+          statusCode: 8,
+          time: `${duration}s`,
+          memory: 'N/A',
+          exitCode: code || 1,
+          signal: signal || null,
+        });
+      }
+    });
 
     if (stdin && child.stdin) {
       child.stdin.write(stdin);
+    }
+    if (child.stdin) {
       child.stdin.end();
     }
   });
@@ -155,8 +281,9 @@ function getLanguageId(language) {
  * @returns {Promise<object>} - Execution result
  */
 async function submitCode(sourceCode, language, stdin = '') {
-  const isKeyConfigured = JUDGE0_API_KEY && !JUDGE0_API_KEY.startsWith('replace-with');
+  const isKeyConfigured = hasJudge0Key();
 
+  // In tests, require a configured key so behavior is deterministic.
   if (process.env.NODE_ENV === 'test' && !isKeyConfigured) {
     throw new Error('Judge0 API key not configured. Set JUDGE0_API_KEY in environment.');
   }
@@ -180,17 +307,7 @@ async function submitCode(sourceCode, language, stdin = '') {
       return await pollForResult(submissionToken);
     } catch (error) {
       if (process.env.NODE_ENV === 'test') {
-        if (error.response) {
-          const status = error.response.status;
-          if (status === 401 || status === 403) {
-            throw new Error('Invalid Judge0 API key or unauthorized access.');
-          } else if (status === 429) {
-            throw new Error('Rate limit exceeded. Please try again later.');
-          } else if (status === 503) {
-            throw new Error('Judge0 service unavailable. Try again later.');
-          }
-        }
-        throw new Error(`Judge0 submission failed: ${error.message}`);
+        throw translateJudge0Error(error);
       }
 
       const fallbackResult = await executeLocally(sourceCode, language, stdin);
@@ -198,17 +315,7 @@ async function submitCode(sourceCode, language, stdin = '') {
         return fallbackResult;
       }
 
-      if (error.response) {
-        const status = error.response.status;
-        if (status === 401 || status === 403) {
-          throw new Error('Invalid Judge0 API key or unauthorized access.');
-        } else if (status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.');
-        } else if (status === 503) {
-          throw new Error('Judge0 service unavailable. Try again later.');
-        }
-      }
-      throw new Error(`Judge0 submission failed: ${error.message}`);
+      throw translateJudge0Error(error);
     }
   }
 
@@ -217,7 +324,31 @@ async function submitCode(sourceCode, language, stdin = '') {
     return fallbackResult;
   }
 
+  if (!isLocalExecutionAllowed()) {
+    throw new Error('Code execution service not configured and local execution is disabled.');
+  }
+
   throw new Error('Judge0 API key not configured. Set JUDGE0_API_KEY in environment.');
+}
+
+/** Translate known Judge0 HTTP errors into user-friendly messages. */
+function translateJudge0Error(error) {
+  if (error.response) {
+    const status = error.response.status;
+    if (status === 401 || status === 403) {
+      return new Error('Invalid Judge0 API key or unauthorized access.');
+    }
+    if (status === 429) {
+      return new Error('Rate limit exceeded. Please try again later.');
+    }
+    if (status === 503) {
+      return new Error('Judge0 service unavailable. Try again later.');
+    }
+  }
+  if (error.message && error.message.includes('Judge0')) {
+    return error;
+  }
+  return new Error(`Judge0 submission failed: ${error.message}`);
 }
 
 /**
@@ -245,12 +376,12 @@ async function pollForResult(token, maxAttempts = 30, delay = 500) {
       }
 
       // Still processing, wait and retry
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
       attempts++;
     } catch (error) {
       if (error.response?.status === 404) {
         // Result not ready yet
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         attempts++;
       } else {
         throw new Error(`Failed to fetch execution result: ${error.message}`);
@@ -296,5 +427,8 @@ function formatResult(result) {
 module.exports = {
   submitCode,
   getLanguageId,
+  isLocalExecutionAllowed,
+  executeLocally,
+  buildChildEnv,
   LANGUAGE_MAP,
 };

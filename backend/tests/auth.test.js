@@ -14,7 +14,7 @@ describe('Authentication Endpoints', () => {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/pairpad_test';
     try {
       await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 2000 });
-    } catch (err) {
+    } catch {
       console.warn('[auth.test.js] MongoDB not reachable. Skipping authentication integration tests.');
       mongoAvailable = false;
       return;

@@ -37,6 +37,7 @@ export const useCollaboration = ({
   const socketCleanupRef = useRef(null);
   // Set to true when an editor change is remote so the local handler skips a re-broadcast.
   const isRemoteChangeRef = useRef(false);
+  const lastRemoteCodeRef = useRef(null);
 
   const cleanupListeners = useCallback(() => {
     if (socketCleanupRef.current) {
@@ -100,10 +101,11 @@ export const useCollaboration = ({
       ({ content, language: nextLanguage }) => {
         if (!isMountedRef.current) return;
         isRemoteChangeRef.current = true;
+        lastRemoteCodeRef.current = content;
         onRemoteCode({ content, language: nextLanguage });
         setTimeout(() => {
           isRemoteChangeRef.current = false;
-        }, 0);
+        }, 50);
       }
     );
 
@@ -190,6 +192,7 @@ export const useCollaboration = ({
     socketError,
     setSocketError,
     isRemoteChangeRef,
+    lastRemoteCodeRef,
     connectToSocket,
     cleanupListeners,
   };

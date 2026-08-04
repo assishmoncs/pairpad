@@ -3,10 +3,14 @@ jest.mock('../src/models/User', () => ({
   findById: jest.fn(),
   create: jest.fn(),
 }));
-jest.mock('../src/utils/generateToken', () => jest.fn(() => 'signed-token'));
+jest.mock('../src/utils/generateToken', () => ({
+  generateToken: jest.fn(() => 'signed-token'),
+  generateAccessToken: jest.fn(() => 'signed-token'),
+  generateRefreshToken: jest.fn(() => 'signed-refresh-token'),
+}));
 
 const User = require('../src/models/User');
-const generateToken = require('../src/utils/generateToken');
+const { generateAccessToken } = require('../src/utils/generateToken');
 const { register, login, getMe } = require('../src/controllers/authController');
 
 const createRes = () => {
@@ -74,13 +78,14 @@ describe('register', () => {
     await register({ body }, res);
 
     expect(User.create).toHaveBeenCalledWith(body);
-    expect(generateToken).toHaveBeenCalledWith('user-1');
+    expect(generateAccessToken).toHaveBeenCalledWith('user-1');
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({
       message: 'Registration successful.',
       data: {
         user: { _id: 'user-1', id: 'user-1', name: 'Ada', email: 'ada@example.com' },
         token: 'signed-token',
+        refreshToken: 'signed-refresh-token',
       },
     });
   });
@@ -174,6 +179,7 @@ describe('login', () => {
       data: {
         user: { _id: 'user-1', id: 'user-1', name: 'Ada', email: 'ada@example.com' },
         token: 'signed-token',
+        refreshToken: 'signed-refresh-token',
       },
     });
   });

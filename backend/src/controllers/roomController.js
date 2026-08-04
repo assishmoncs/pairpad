@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const logger = require('../utils/logger');
 const Room = require('../models/Room');
 const Message = require('../models/Message');
 const { validateRoomName, sanitizeString } = require('../utils/validation');
@@ -47,7 +48,7 @@ const createRoom = async (req, res) => {
 
     sendSuccess(res, 'Room created successfully.', { room: populatedRoom }, { status: 201 });
   } catch (error) {
-    console.error('Create room error:', error.message);
+    logger.error('Create room error', { message: error.message });
 
     if (error.name === 'ValidationError') {
       return sendValidationError(res, error);
@@ -69,7 +70,7 @@ const getUserRooms = async (req, res) => {
       count: rooms.length,
     });
   } catch (error) {
-    console.error('Get user rooms error:', error.message);
+    logger.error('Get user rooms error', { message: error.message });
     sendError(res, 500, 'Failed to retrieve rooms. Please try again.');
   }
 };
@@ -98,7 +99,7 @@ const getRoom = async (req, res) => {
 
     sendSuccess(res, 'Room retrieved successfully.', { room });
   } catch (error) {
-    console.error('Get room error:', error.message);
+    logger.error('Get room error', { message: error.message });
 
     if (error.name === 'CastError') {
       return sendError(res, 404, 'Room not found.');
@@ -138,7 +139,7 @@ const joinRoom = async (req, res) => {
       room: await findPopulatedRoomById(room._id),
     });
   } catch (error) {
-    console.error('Join room error:', error.message);
+    logger.error('Join room error', { message: error.message });
     sendError(res, 500, 'Failed to join room. Please try again.');
   }
 };
@@ -171,7 +172,7 @@ const leaveRoom = async (req, res) => {
 
     sendSuccess(res, 'Successfully left the room.');
   } catch (error) {
-    console.error('Leave room error:', error.message);
+    logger.error('Leave room error', { message: error.message });
     sendError(res, 500, 'Failed to leave room. Please try again.');
   }
 };
@@ -214,7 +215,7 @@ const transferOwnership = async (req, res) => {
     const populatedRoom = await findPopulatedRoomById(room._id);
     sendSuccess(res, 'Ownership transferred successfully.', { room: populatedRoom });
   } catch (error) {
-    console.error('Transfer ownership error:', error.message);
+    logger.error('Transfer ownership error', { message: error.message });
     if (error.name === 'CastError') {
       return sendError(res, 400, 'Invalid userId.');
     }
@@ -248,7 +249,7 @@ const deleteRoom = async (req, res) => {
 
     sendSuccess(res, 'Room deleted successfully.');
   } catch (error) {
-    console.error('Delete room error:', error.message);
+    logger.error('Delete room error', { message: error.message });
     sendError(res, 500, 'Failed to delete room. Please try again.');
   }
 };

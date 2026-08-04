@@ -1,6 +1,15 @@
 jest.mock('mongoose', () => ({ connect: jest.fn() }));
+jest.mock('../src/utils/logger', () => ({
+  info: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  fatal: jest.fn(),
+  child: jest.fn(() => ({ info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn(), fatal: jest.fn() })),
+}));
 
 const mongoose = require('mongoose');
+const logger = require('../src/utils/logger');
 
 // db.js reads MONGODB_URI at require time.
 const loadConnectDB = (uri) => {
@@ -65,6 +74,6 @@ describe('connectDB', () => {
     await expect(loadConnectDB('mongodb://db.test/pairpad')()).rejects.toThrow(
       'connection refused'
     );
-    expect(consoleError).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
   });
 });

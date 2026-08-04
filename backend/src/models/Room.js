@@ -31,7 +31,7 @@ const roomSchema = new mongoose.Schema(
     language: {
       type: String,
       default: 'javascript',
-      enum: ['javascript', 'python', 'java', 'cpp', 'c', 'go', 'rust', 'typescript'],
+      enum: ['javascript', 'python', 'java', 'cpp', 'c', 'go', 'rust', 'typescript', 'php', 'ruby'],
     },
     description: {
       type: String,
@@ -41,6 +41,7 @@ const roomSchema = new mongoose.Schema(
     snapshotCode: {
       type: String,
       default: '',
+      maxlength: [524288, 'Code snapshot cannot exceed 512KB'],
     },
   },
   {
@@ -55,5 +56,7 @@ roomSchema.pre('save', function (next) {
   }
   next();
 });
+
+roomSchema.index({ members: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Room', roomSchema);

@@ -171,7 +171,7 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason) => {
   const message = reason instanceof Error ? reason.stack || reason.message : reason;
   logger.error('Unhandled promise rejection', { message });
-  process.exit(1);
+  shutdown('unhandledRejection');
 });
 
 // Expose a close helper for integration tests.

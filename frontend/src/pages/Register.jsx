@@ -9,6 +9,8 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
@@ -44,7 +46,7 @@ const Register = () => {
       <div className="auth-container">
         <h1>Create Account</h1>
 
-        {error && <div className="error-message">{error}</div>}
+        {error && <div className="error-message" aria-live="polite">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <FormField
@@ -69,21 +71,41 @@ const Register = () => {
           <FormField
             id="password"
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={setPassword}
             placeholder="Create a password"
             required
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.8em', color: '#888' }}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            }
           />
 
           <FormField
             id="confirmPassword"
             label="Confirm Password"
-            type="password"
+            type={showConfirmPassword ? 'text' : 'password'}
             value={confirmPassword}
             onChange={setConfirmPassword}
             placeholder="Confirm your password"
             required
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.8em', color: '#888' }}
+              >
+                {showConfirmPassword ? 'Hide' : 'Show'}
+              </button>
+            }
           />
 
           <button type="submit" disabled={loading} className="btn-primary">

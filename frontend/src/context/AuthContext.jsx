@@ -10,6 +10,7 @@ const AUTH_STATUS = {
 };
 
 const getStoredToken = () => localStorage.getItem('token');
+const getStoredRefreshToken = () => localStorage.getItem('refreshToken');
 
 const setAuthorizationHeader = (authToken) => {
   if (authToken) {
@@ -36,11 +37,18 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState('');
   const [refreshCount, setRefreshCount] = useState(0);
 
-  const persistToken = (authToken) => {
+  const persistToken = (authToken, refreshTkn) => {
     if (authToken) {
       localStorage.setItem('token', authToken);
     } else {
       localStorage.removeItem('token');
+    }
+    if (refreshTkn !== undefined) {
+      if (refreshTkn) {
+        localStorage.setItem('refreshToken', refreshTkn);
+      } else {
+        localStorage.removeItem('refreshToken');
+      }
     }
 
     setAuthorizationHeader(authToken);
@@ -97,11 +105,93 @@ export const AuthProvider = ({ children }) => {
     };
   }, [token, refreshCount]);
 
+  // Axios interceptor: auto-refresh on 401
+  useEffect(() => {
+    let isRefreshing = false;
+    let failedQueue = [];
+
+    const processQueue = (error, newToken = null) => {
+      failedQueue.forEach(({ resolve, reject }) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(newToken);
+        }
+      });
+      failedQueue = [];
+    };
+
+    if (!axios.interceptors?.response) return;
+
+    const interceptorId = axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+
+        // Only retry once, only on 401, skip auth endpoints
+        if (
+          error.response?.status !== 401 ||
+          originalRequest._retry ||
+          originalRequest.url?.includes('/api/auth/')
+        ) {
+          return Promise.reject(error);
+        }
+
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          }).then((newToken) => {
+            originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+            return axios(originalRequest);
+          });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        const storedRefresh = getStoredRefreshToken();
+        if (!storedRefresh) {
+          isRefreshing = false;
+          return Promise.reject(error);
+        }
+
+        try {
+          const refreshResponse = await axios.post('/api/auth/refresh', {
+            refreshToken: storedRefresh,
+          });
+          const { token: newToken, refreshToken: newRefresh } = refreshResponse.data.data;
+
+          persistToken(newToken, newRefresh);
+          processQueue(null, newToken);
+
+          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+          return axios(originalRequest);
+        } catch (refreshError) {
+          processQueue(refreshError, null);
+          // Refresh failed — force logout
+          persistToken(null, null);
+          setUser(null);
+          setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+          setAuthError('');
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
+        }
+      }
+    );
+
+    return () => {
+      if (interceptorId !== undefined) {
+        axios.interceptors?.response?.eject?.(interceptorId);
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const authenticate = async (endpoint, payload) => {
     const response = await axios.post(endpoint, payload);
-    const { user: userData, token: authToken } = response.data.data;
+    const { user: userData, token: authToken, refreshToken: refreshTkn } = response.data.data;
 
-    persistToken(authToken);
+    persistToken(authToken, refreshTkn);
     setUser(userData);
     setAuthStatus(AUTH_STATUS.AUTHENTICATED);
     setAuthError('');
@@ -115,7 +205,7 @@ export const AuthProvider = ({ children }) => {
     authenticate('/api/auth/register', { name, email, password });
 
   const logout = () => {
-    persistToken(null);
+    persistToken(null, null);
     setUser(null);
     setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
     setAuthError('');

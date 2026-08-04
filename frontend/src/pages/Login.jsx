@@ -7,6 +7,7 @@ import FormField from '../components/FormField';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -29,7 +30,7 @@ const Login = () => {
       <div className="auth-container">
         <h1>Login to PairPad</h1>
 
-        {error && <div className="error-message">{error}</div>}
+        {error && <div className="error-message" aria-live="polite">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <FormField
@@ -45,11 +46,21 @@ const Login = () => {
           <FormField
             id="password"
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={setPassword}
             placeholder="Enter your password"
             required
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.8em', color: '#888' }}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            }
           />
 
           <button type="submit" disabled={loading} className="btn-primary">

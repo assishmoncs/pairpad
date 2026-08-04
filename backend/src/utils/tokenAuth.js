@@ -11,6 +11,10 @@ const User = require('../models/User');
  */
 const getUserFromToken = async (token) => {
   const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  // Reject refresh tokens used as access tokens
+  if (decoded.type === 'refresh') {
+    throw new jwt.JsonWebTokenError('Refresh tokens cannot be used for authentication.');
+  }
   return User.findById(decoded.userId).select('-password');
 };
 

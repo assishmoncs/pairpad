@@ -168,8 +168,9 @@ pairpad/
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/api/auth/register` | — | Create account → returns `{ token, user }` |
-| `POST` | `/api/auth/login` | — | Authenticate → returns `{ token, user }` |
+| `POST` | `/api/auth/register` | — | Create account → returns `{ token, refreshToken, user }` |
+| `POST` | `/api/auth/login` | — | Authenticate → returns `{ token, refreshToken, user }` |
+| `POST` | `/api/auth/refresh` | — | Refresh access token → returns `{ token, refreshToken }` |
 | `GET` | `/api/auth/me` | Bearer | Get the current user |
 
 ### Rooms

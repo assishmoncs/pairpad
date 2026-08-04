@@ -1,6 +1,7 @@
 // Execute code controller — Judge0 API, auth + room membership required
 
 const judge0Service = require('../services/judge0Service');
+const logger = require('../utils/logger');
 const { validateSourceCode } = require('../utils/validation');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const {
@@ -81,7 +82,7 @@ const executeCode = async (req, res) => {
 
     sendSuccess(res, 'Code executed successfully.', { result });
   } catch (error) {
-    console.error('[ExecuteController] Error executing code:', error.message);
+    logger.error('Error executing code', { message: error.message });
 
     if (error.message.includes('API key')) {
       return sendError(

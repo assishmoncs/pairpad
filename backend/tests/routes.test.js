@@ -3,6 +3,7 @@ const mockHandlerNames = [
   'register',
   'login',
   'getMe',
+  'refreshAccessToken',
   'createRoom',
   'getUserRooms',
   'getRoom',
@@ -24,6 +25,7 @@ jest.mock('../src/controllers/authController', () => ({
   register: (...args) => mockHandlers.register(...args),
   login: (...args) => mockHandlers.login(...args),
   getMe: (...args) => mockHandlers.getMe(...args),
+  refreshAccessToken: (...args) => mockHandlers.refreshAccessToken(...args),
 }));
 jest.mock('../src/controllers/roomController', () => ({
   createRoom: (...args) => mockHandlers.createRoom(...args),
@@ -66,6 +68,7 @@ describe('auth routes', () => {
   it.each([
     ['post', '/api/auth/register', 'register'],
     ['post', '/api/auth/login', 'login'],
+    ['post', '/api/auth/refresh', 'refreshAccessToken'],
   ])('%s %s is public', async (method, path, handler) => {
     const response = await request(app)[method](path).send({});
 

@@ -1,5 +1,7 @@
 const User = require('../models/User');
-const generateToken = require('../utils/generateToken');
+const logger = require('../utils/logger');
+const { generateAccessToken, generateRefreshToken } = require('../utils/generateToken');
+const jwt = require('jsonwebtoken');
 const {
   sanitizeString,
   isValidEmail,
@@ -17,9 +19,10 @@ const formatUser = (user) => ({
 
 /** Build the shared auth payload returned by register and login. */
 const sendAuthSuccess = (res, message, user, status) => {
-  const token = generateToken(user._id);
+  const token = generateAccessToken(user._id);
+  const refreshToken = generateRefreshToken(user._id);
 
-  return sendSuccess(res, message, { user: formatUser(user), token }, { status });
+  return sendSuccess(res, message, { user: formatUser(user), token, refreshToken }, { status });
 };
 
 // @desc    Register a new user
@@ -68,7 +71,7 @@ const register = async (req, res) => {
 
     sendAuthSuccess(res, 'Registration successful.', user, 201);
   } catch (error) {
-    console.error('Register error:', error.message);
+    logger.error('Register error', { message: error.message });
 
     if (error.name === 'ValidationError') {
       return sendValidationError(res, error);
@@ -110,7 +113,7 @@ const login = async (req, res) => {
 
     sendAuthSuccess(res, 'Login successful.', user);
   } catch (error) {
-    console.error('Login error:', error.message);
+    logger.error('Login error', { message: error.message });
     sendError(res, 500, 'Login failed. Please try again.');
   }
 };
@@ -128,8 +131,51 @@ const getMe = async (req, res) => {
 
     sendSuccess(res, 'User retrieved successfully.', { user: formatUser(user) });
   } catch (error) {
-    console.error('Get me error:', error.message);
+    logger.error('Get me error', { message: error.message });
     sendError(res, 500, 'Failed to retrieve user. Please try again.');
+  }
+};
+
+// @desc    Refresh access token
+// @route   POST /api/auth/refresh
+// @access  Public (requires valid refresh token)
+const refreshAccessToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      return sendError(res, 400, 'Refresh token is required.');
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        return sendError(res, 401, 'Refresh token has expired. Please login again.');
+      }
+      return sendError(res, 401, 'Invalid refresh token.');
+    }
+
+    if (decoded.type !== 'refresh') {
+      return sendError(res, 401, 'Invalid token type. A refresh token is required.');
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return sendError(res, 401, 'User not found. Token may be invalid.');
+    }
+
+    const newAccessToken = generateAccessToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    sendSuccess(res, 'Token refreshed successfully.', {
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    logger.error('Token refresh error', { message: error.message });
+    sendError(res, 500, 'Failed to refresh token. Please try again.');
   }
 };
 
@@ -137,4 +183,5 @@ module.exports = {
   register,
   login,
   getMe,
+  refreshAccessToken,
 };

@@ -4,6 +4,16 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          monaco: ['@monaco-editor/react'],
+          vendor: ['react', 'react-dom', 'react-router-dom', 'axios', 'socket.io-client'],
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
@@ -20,10 +30,10 @@ export default defineConfig({
         '**/*.test.{js,jsx}',
       ],
       thresholds: {
-        lines: 60,
-        functions: 60,
-        branches: 50,
-        statements: 60,
+        lines: 65,
+        functions: 65,
+        branches: 55,
+        statements: 65,
       },
     },
   },

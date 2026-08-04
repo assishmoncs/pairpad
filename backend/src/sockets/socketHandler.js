@@ -28,10 +28,26 @@ const {
 // Store online users per room: { [roomCode]: Map<socketId, { userId, name, socketId }> }
 const roomPresence = new Map();
 
+const MAX_CODE_SIZE = 512 * 1024; // 512 KB max code payload
+
 // ── Connection rate limiting ────────────────────────────────────────────────
 const SOCKET_WINDOW_MS = 60 * 1000;
 const SOCKET_MAX_CONNECTIONS = 20;
 const connectionAttempts = new Map(); // ip -> number of attempts in window
+
+// Clean up expired rate limiting IP records every 5 minutes
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+setInterval(() => {
+  const windowStart = Date.now() - SOCKET_WINDOW_MS;
+  for (const [ip, attempts] of connectionAttempts.entries()) {
+    const valid = attempts.filter((t) => t >= windowStart);
+    if (valid.length === 0) {
+      connectionAttempts.delete(ip);
+    } else {
+      connectionAttempts.set(ip, valid);
+    }
+  }
+}, CLEANUP_INTERVAL_MS).unref();
 
 function enforceConnectionLimit(socket, next) {
   const ip = (socket.handshake && socket.handshake.address) || 'unknown';
@@ -47,6 +63,43 @@ function enforceConnectionLimit(socket, next) {
   attempts.push(now);
   connectionAttempts.set(ip, attempts);
   next();
+}
+
+// ── Per-socket event rate limiting ──────────────────────────────────────────
+const EVENT_RATE_WINDOW_MS = 60 * 1000;
+const EVENT_RATE_LIMITS = {
+  'code-change': 120,    // Max 120 code changes per minute (2/sec average)
+  'chat-message': 30,    // Max 30 chat messages per minute
+  'cursor-update': 300,  // Max 300 cursor updates per minute (5/sec)
+};
+
+function checkEventRate(socket, event) {
+  if (!EVENT_RATE_LIMITS[event]) return true; // No limit configured
+
+  if (!socket._eventCounts) socket._eventCounts = {};
+  if (!socket._eventWindows) socket._eventWindows = {};
+
+  const now = Date.now();
+  const windowStart = now - EVENT_RATE_WINDOW_MS;
+
+  // Reset counter if window has expired
+  if (!socket._eventWindows[event] || socket._eventWindows[event] < windowStart) {
+    socket._eventCounts[event] = 0;
+    socket._eventWindows[event] = now;
+  }
+
+  socket._eventCounts[event]++;
+
+  if (socket._eventCounts[event] > EVENT_RATE_LIMITS[event]) {
+    logger.warn('Socket event rate limit exceeded', {
+      event,
+      socketId: socket.id,
+      user: socket.user?.name,
+    });
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -279,6 +332,14 @@ const initializeSocket = (io) => {
         return callback?.({ error: 'Content is required.' });
       }
 
+      if (typeof content === 'string' && content.length > MAX_CODE_SIZE) {
+        return callback?.({ error: `Code payload exceeds maximum size of ${MAX_CODE_SIZE} bytes.` });
+      }
+
+      if (!checkEventRate(socket, 'code-change')) {
+        return callback?.({ error: 'Rate limit exceeded. Please slow down.' });
+      }
+
       // Persist snapshot to room document (debounced, non-blocking).
       persistSnapshot(socket, socket.currentRoom, content, language);
 
@@ -301,6 +362,8 @@ const initializeSocket = (io) => {
     socket.on('cursor-update', (data) => {
       if (!socket.currentRoom) return;
 
+      if (!checkEventRate(socket, 'cursor-update')) return;
+
       const { position, selection } = data;
 
       socket.to(`room:${socket.currentRoom}`).emit('cursor-update', {
@@ -320,6 +383,10 @@ const initializeSocket = (io) => {
       try {
         if (!socket.currentRoom) {
           return callback?.({ error: 'Not in a room.' });
+        }
+
+        if (!checkEventRate(socket, 'chat-message')) {
+          return callback?.({ error: 'Rate limit exceeded. Please slow down.' });
         }
 
         const { content } = data;

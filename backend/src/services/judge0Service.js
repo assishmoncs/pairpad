@@ -56,10 +56,15 @@ const isLocalExecutionAllowed = () => {
   return true;
 };
 
+// Log a warning at module load when local execution is allowed.
+if (isLocalExecutionAllowed() && process.env.NODE_ENV !== 'test') {
+  logger.warn('⚠️  Local code execution is ENABLED. User-submitted code runs on this host without container isolation.');
+}
+
 /** Environment for child processes: explicit allowlist, secrets never inherited. */
 function buildChildEnv() {
   return {
-    PATH: process.env.PATH || '/usr/bin:/bin:/usr/local/bin',
+    PATH: process.env.PATH || (process.platform === 'win32' ? process.env.PATH : '/usr/bin:/bin'),
     HOME: process.env.HOME || os.homedir(),
     TMPDIR: os.tmpdir(),
     TMP: os.tmpdir(),

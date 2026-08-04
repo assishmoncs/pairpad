@@ -170,7 +170,14 @@ const Room = () => {
     async (value) => {
       setCode(value);
 
-      if (collaboration.isRemoteChangeRef.current) return;
+      if (
+        collaboration.isRemoteChangeRef.current ||
+        value === collaboration.lastRemoteCodeRef.current
+      ) {
+        collaboration.isRemoteChangeRef.current = false;
+        collaboration.lastRemoteCodeRef.current = null;
+        return;
+      }
 
       setIsSaving(true);
       try {
@@ -259,7 +266,7 @@ const Room = () => {
     <div className="room-page">
       <header className="room-header">
         <div className="header-left">
-          <button onClick={() => navigate('/dashboard')} className="btn-back">
+          <button onClick={() => navigate('/dashboard')} className="btn-back" aria-label="Back to Dashboard">
             ← Dashboard
           </button>
           <h1>{room?.name}</h1>
@@ -269,6 +276,7 @@ const Room = () => {
               onClick={handleCopyRoomCode}
               className="btn-room-code"
               title="Click to copy room code"
+              aria-label={`Copy room code ${room.roomCode}`}
             >
               {room.roomCode}
               <span className="room-code-copy-hint">{copiedCode ? ' ✓ Copied!' : ' · Copy'}</span>
@@ -282,6 +290,7 @@ const Room = () => {
               onClick={handleDeleteRoom}
               disabled={deletingRoom}
               className="btn-delete-room"
+              aria-label="Delete Room"
             >
               {deletingRoom ? 'Deleting…' : 'Delete Room'}
             </button>
@@ -296,18 +305,18 @@ const Room = () => {
         </div>
       </header>
 
-      {error && <div className="room-alert error-text">{error}</div>}
+      {error && <div className="room-alert error-text" aria-live="polite">{error}</div>}
 
       <div className="room-layout">
         <div className="editor-section">
           <div className="editor-toolbar">
             <div className="language-selector">
               <label htmlFor="language">Language:</label>
-              <LanguageSelect value={language} onChange={(e) => setLanguage(e.target.value)} />
+              <LanguageSelect value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Select Editor Language" />
             </div>
-            {isSaving && <span className="saving-indicator">Syncing...</span>}
-            {syncError && <span className="error-text">{syncError}</span>}
-            <button onClick={handleRunCode} disabled={executing} className="btn-run">
+            {isSaving && <span className="saving-indicator" aria-live="polite">Syncing...</span>}
+            {syncError && <span className="error-text" aria-live="polite">{syncError}</span>}
+            <button onClick={handleRunCode} disabled={executing} className="btn-run" aria-label="Run Code">
               {executing ? 'Running...' : 'Run Code'}
             </button>
           </div>
@@ -317,6 +326,7 @@ const Room = () => {
             language={language}
             value={code}
             theme="vs-dark"
+            loading={<LoadingSpinner label="Loading Monaco Editor..." />}
             onMount={handleEditorMount}
             onChange={handleCodeChange}
             options={{
@@ -328,8 +338,8 @@ const Room = () => {
           />
         </div>
 
-        <aside className="room-sidebar">
-          <div className="sidebar-section presence-section">
+        <aside className="room-sidebar" aria-label="Room Sidebar">
+          <div className="sidebar-section presence-section" aria-live="polite" aria-label="Online Users">
             <h3>Online Users ({collaboration.onlineUsers.length})</h3>
             <ul className="users-list">
               {collaboration.onlineUsers.map((u) => (

@@ -1,5 +1,6 @@
 const { getUserFromToken } = require('../utils/tokenAuth');
 const { sendError } = require('../utils/apiResponse');
+const logger = require('../utils/logger');
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -25,7 +26,7 @@ const authMiddleware = async (req, res, next) => {
     if (error.name === 'TokenExpiredError') {
       return sendError(res, 401, 'Token has expired. Please login again.');
     }
-    console.error('Auth middleware error:', error.message);
+    logger.error('Auth middleware error', { message: error.message });
     return sendError(res, 500, 'Authentication failed. Please try again.');
   }
 };

@@ -110,12 +110,12 @@ const Dashboard = () => {
     <div className="dashboard">
       <header className="dashboard-header">
         <h1>Welcome, {user?.name}!</h1>
-        <button onClick={logout} className="btn-secondary">
+        <button onClick={logout} className="btn-secondary" aria-label="Logout">
           Logout
         </button>
       </header>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="error-message" aria-live="polite">{error}</div>}
 
       <div className="dashboard-content">
         <div className="rooms-section">
@@ -128,6 +128,7 @@ const Dashboard = () => {
                   setShowJoinForm(false);
                 }}
                 className="btn-primary"
+                aria-label={showCreateForm ? 'Cancel Create Room' : 'Create Room'}
               >
                 {showCreateForm ? 'Cancel' : 'Create Room'}
               </button>
@@ -196,9 +197,9 @@ const Dashboard = () => {
           {rooms.length === 0 ? (
             <p className="no-rooms">You don't have any rooms yet. Create one to get started!</p>
           ) : (
-            <div className="rooms-list">
+            <div className="rooms-list" role="list">
               {rooms.map((room) => (
-                <div key={getRoomKey(room)} className="room-card">
+                <article key={getRoomKey(room)} className="room-card" tabIndex="0" role="listitem">
                   <h3>{room.name}</h3>
                   <p className="room-code">
                     Code: <strong>{room.roomCode}</strong>
@@ -213,7 +214,7 @@ const Dashboard = () => {
                       Open Room
                     </button>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           )}

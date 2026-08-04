@@ -1,21 +1,23 @@
 /**
  * Socket.IO handler for real-time collaboration in PairPad.
- * 
+ *
  * Features:
  * - JWT authentication for socket connections
  * - Room-based channels for collaboration
  * - Code synchronization (full document sync for MVP)
  * - User presence tracking
  * - Chat message broadcasting and persistence
- * 
+ * - Per-IP connection rate limiting and debounced snapshot persistence
+ *
  * Limitations (MVP):
  * - Uses full document sync instead of CRDT/OT
  * - Last-write-wins conflict resolution
- * - Not production multi-instance ready
+ * - Presence is in-memory (single-instance); use the Redis adapter for scaling
  */
 
 const Message = require('../models/Message');
 const Room = require('../models/Room');
+const logger = require('../utils/logger');
 const { getUserFromToken } = require('../utils/tokenAuth');
 const {
   findRoomByCode,
@@ -25,6 +27,27 @@ const {
 
 // Store online users per room: { [roomCode]: Map<socketId, { userId, name, socketId }> }
 const roomPresence = new Map();
+
+// ── Connection rate limiting ────────────────────────────────────────────────
+const SOCKET_WINDOW_MS = 60 * 1000;
+const SOCKET_MAX_CONNECTIONS = 20;
+const connectionAttempts = new Map(); // ip -> number of attempts in window
+
+function enforceConnectionLimit(socket, next) {
+  const ip = (socket.handshake && socket.handshake.address) || 'unknown';
+  const now = Date.now();
+  const windowStart = now - SOCKET_WINDOW_MS;
+
+  // Prune expired entries periodically.
+  const attempts = (connectionAttempts.get(ip) || []).filter((t) => t >= windowStart);
+  if (attempts.length >= SOCKET_MAX_CONNECTIONS) {
+    logger.warn('Socket connection rate limit exceeded', { ip });
+    return next(new Error('Too many connections. Please try again later.'));
+  }
+  attempts.push(now);
+  connectionAttempts.set(ip, attempts);
+  next();
+}
 
 /**
  * Authenticate socket connection via JWT token.
@@ -70,14 +93,66 @@ const socketIdentity = (socket) => ({
   name: socket.user.name,
 });
 
+/** Debounced snapshot persistence: coalesce rapid edits into a single write. */
+const SNAPSHOT_DEBOUNCE_MS = 500;
+const snapshotTimers = new Map(); // socketId -> { roomCode, timer, pendingContent, pendingLanguage }
+
+function persistSnapshot(socket, roomCode, content, language) {
+  const entry = snapshotTimers.get(socket.id);
+
+  // Reset the timer and remember the latest state.
+  if (entry) {
+    clearTimeout(entry.timer);
+  }
+
+  snapshotTimers.set(socket.id, {
+    roomCode,
+    pendingContent: content,
+    pendingLanguage: language,
+    timer: setTimeout(() => {
+      flushSnapshot(socket.id);
+    }, SNAPSHOT_DEBOUNCE_MS),
+  });
+}
+
+function flushSnapshot(socketId) {
+  const entry = snapshotTimers.get(socketId);
+  if (!entry) return;
+  snapshotTimers.delete(socketId);
+
+  const { roomCode, pendingContent, pendingLanguage } = entry;
+  Room.updateOne(
+    { roomCode },
+    {
+      $set: {
+        snapshotCode: pendingContent,
+        ...(pendingLanguage ? { language: pendingLanguage } : {}),
+      },
+    }
+  ).catch((err) => logger.error('Failed to persist code snapshot', { message: err.message }));
+}
+
+function clearSnapshotTimer(socket) {
+  const entry = snapshotTimers.get(socket.id);
+  if (entry) {
+    clearTimeout(entry.timer);
+    snapshotTimers.delete(socket.id);
+  }
+}
+
 /**
  * Initialize Socket.IO server
  */
 const initializeSocket = (io) => {
-  console.log('[Socket] Initializing Socket.IO server...');
+  logger.info('Initializing Socket.IO server...');
+
+  // Rate-limit raw connections per IP before authentication.
+  io.use(enforceConnectionLimit);
 
   // Middleware to authenticate socket connections
   io.use(async (socket, next) => {
+    // Note: prefer handshake.auth.token; query string retained for
+    // backward compatibility with existing clients.
     const token = socket.handshake.auth.token || socket.handshake.query.token;
 
     if (!token) {
@@ -102,13 +177,13 @@ const initializeSocket = (io) => {
         return next(new Error('Invalid or expired token.'));
       }
 
-      console.error('[Socket] Authentication error:', error.message);
+      logger.error('Socket authentication error', { message: error.message });
       return next(new Error('Authentication service error. Please try again.'));
     }
   });
 
   io.on('connection', (socket) => {
-    console.log(`[Socket] User connected: ${socket.user.name} (${socket.id})`);
+    logger.info(`User connected: ${socket.user.name} (${socket.id})`);
 
     /**
      * Join a room by room code
@@ -118,20 +193,20 @@ const initializeSocket = (io) => {
     socket.on('join-room', async (data, callback) => {
       try {
         const { roomCode } = data;
-        
+
         if (!roomCode || typeof roomCode !== 'string') {
           return callback?.({ error: 'Room code is required.' });
         }
-        
+
         const normalizedRoomCode = normalizeRoomCode(roomCode);
-        
+
         // Find room and verify membership
         const room = await findRoomByCode(normalizedRoomCode);
-        
+
         if (!room) {
           return callback?.({ error: 'Room not found.' });
         }
-        
+
         if (!isRoomParticipant(room, socket.user._id)) {
           return callback?.({ error: 'You are not authorized to join this room.' });
         }
@@ -139,28 +214,28 @@ const initializeSocket = (io) => {
         if (socket.currentRoom && socket.currentRoom !== normalizedRoomCode) {
           handleLeaveRoom(io, socket);
         }
-        
+
         // Join the room channel
         socket.join(`room:${normalizedRoomCode}`);
         socket.currentRoom = normalizedRoomCode;
-        
+
         // Add to presence
         const presence = getRoomPresence(normalizedRoomCode);
         presence.set(socket.id, { ...socketIdentity(socket), socketId: socket.id });
-        
+
         // Notify others in room
         socket.to(`room:${normalizedRoomCode}`).emit('user-joined', socketIdentity(socket));
-        
+
         // Broadcast updated presence
         broadcastPresence(io, normalizedRoomCode);
-        
+
         // Send current room state to the joining user
-        const currentUsers = Array.from(presence.values()).map(u => ({
+        const currentUsers = Array.from(presence.values()).map((u) => ({
           userId: u.userId,
           name: u.name,
           socketId: u.socketId,
         }));
-        
+
         callback?.({
           success: true,
           room: {
@@ -170,10 +245,10 @@ const initializeSocket = (io) => {
           },
           users: currentUsers,
         });
-        
-        console.log(`[Socket] User ${socket.user.name} joined room ${normalizedRoomCode}`);
+
+        logger.info(`User ${socket.user.name} joined room ${normalizedRoomCode}`);
       } catch (error) {
-        console.error('[Socket] Error joining room:', error.message);
+        logger.error('Error joining room', { message: error.message });
         callback?.({ error: 'Failed to join room.' });
       }
     });
@@ -197,26 +272,16 @@ const initializeSocket = (io) => {
       if (!socket.currentRoom) {
         return callback?.({ error: 'Not in a room.' });
       }
-      
+
       const { content, language } = data;
-      
+
       if (content === undefined) {
         return callback?.({ error: 'Content is required.' });
       }
 
-      // Persist snapshot to room document asynchronously (non-blocking)
-      Room.updateOne(
-        { roomCode: socket.currentRoom },
-        {
-          $set: {
-            snapshotCode: content,
-            ...(language ? { language } : {}),
-          },
-        }
-      ).catch((err) =>
-        console.error('[Socket] Failed to update code snapshot:', err.message)
-      );
-      
+      // Persist snapshot to room document (debounced, non-blocking).
+      persistSnapshot(socket, socket.currentRoom, content, language);
+
       // Broadcast to other users in the room (not sender)
       socket.to(`room:${socket.currentRoom}`).emit('code-change', {
         content,
@@ -224,7 +289,7 @@ const initializeSocket = (io) => {
         userId: socket.user._id.toString(),
         userName: socket.user.name,
       });
-      
+
       callback?.({ success: true });
     });
 
@@ -235,9 +300,9 @@ const initializeSocket = (io) => {
      */
     socket.on('cursor-update', (data) => {
       if (!socket.currentRoom) return;
-      
+
       const { position, selection } = data;
-      
+
       socket.to(`room:${socket.currentRoom}`).emit('cursor-update', {
         userId: socket.user._id.toString(),
         userName: socket.user.name,
@@ -256,33 +321,35 @@ const initializeSocket = (io) => {
         if (!socket.currentRoom) {
           return callback?.({ error: 'Not in a room.' });
         }
-        
+
         const { content } = data;
-        
+
         if (!content || typeof content !== 'string' || !content.trim()) {
           return callback?.({ error: 'Message content is required.' });
         }
-        
+
         const trimmedContent = content.trim().substring(0, 1000);
-        
+
         // Find room to get MongoDB ID
         const room = await findRoomByCode(socket.currentRoom);
-        
+
         if (!room) {
           return callback?.({ error: 'Room not found.' });
         }
-        
+
         // Save message to database
         const message = await Message.create({
           room: room._id,
           sender: socket.user._id,
           content: trimmedContent,
         });
-        
+
         // Populate sender info
-        const populatedMessage = await Message.findById(message._id)
-          .populate('sender', 'name email');
-        
+        const populatedMessage = await Message.findById(message._id).populate(
+          'sender',
+          'name email'
+        );
+
         // Broadcast to all users in room (including sender for confirmation).
         // IDs are stringified so the frontend deduplication (appendUniqueMessage)
         // can compare them with strict equality.
@@ -296,12 +363,12 @@ const initializeSocket = (io) => {
           },
           createdAt: populatedMessage.createdAt,
         });
-        
+
         callback?.({ success: true, message: populatedMessage });
-        
-        console.log(`[Socket] Message in room ${socket.currentRoom} from ${socket.user.name}`);
+
+        logger.info(`Message in room ${socket.currentRoom} from ${socket.user.name}`);
       } catch (error) {
-        console.error('[Socket] Error sending message:', error.message);
+        logger.error('Error sending message', { message: error.message });
         callback?.({ error: 'Failed to send message.' });
       }
     });
@@ -310,12 +377,12 @@ const initializeSocket = (io) => {
      * Handle disconnect
      */
     socket.on('disconnect', () => {
-      console.log(`[Socket] User disconnected: ${socket.user.name} (${socket.id})`);
+      logger.info(`User disconnected: ${socket.user.name} (${socket.id})`);
       handleLeaveRoom(io, socket);
     });
   });
 
-  console.log('[Socket] Socket.IO server initialized successfully');
+  logger.info('Socket.IO server initialized successfully');
 };
 
 /**
@@ -323,30 +390,34 @@ const initializeSocket = (io) => {
  */
 const handleLeaveRoom = (io, socket) => {
   if (!socket.currentRoom) return;
-  
+
   const roomCode = socket.currentRoom;
   const presence = getRoomPresence(roomCode);
-  
+
+  // Flush any pending snapshot and cancel future debounces.
+  flushSnapshot(socket.id);
+  clearSnapshotTimer(socket);
+
   // Remove from presence
   presence.delete(socket.id);
-  
+
   // Leave the room channel
   socket.leave(`room:${roomCode}`);
-  
+
   // Notify others
   socket.to(`room:${roomCode}`).emit('user-left', socketIdentity(socket));
-  
+
   // Broadcast updated presence
   broadcastPresence(io, roomCode);
-  
+
   // Clean up empty room presence maps
   if (presence.size === 0) {
     roomPresence.delete(roomCode);
   }
-  
+
   socket.currentRoom = null;
-  
-  console.log(`[Socket] User ${socket.user.name} left room ${roomCode}`);
+
+  logger.info(`User ${socket.user.name} left room ${roomCode}`);
 };
 
 module.exports = initializeSocket;

@@ -1,25 +1,30 @@
 // Main backend entry point for PairPad.
-// Initializes Express, applies middleware, mounts routes, starts HTTP server, and sets up Socket.IO.
+// Initializes Express, applies middleware, mounts routes, starts the HTTP server,
+// and sets up Socket.IO.
 
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const http = require('http');
+const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
+const logger = require('./utils/logger');
 const authRoutes = require('./routes/authRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const executeRoutes = require('./routes/executeRoutes');
 const initializeSocket = require('./sockets/socketHandler');
 const { apiLimiter, authLimiter, executeLimiter } = require('./middleware/rateLimiter');
-const { notFoundMiddleware, errorHandler } = require('./middleware/errorHandler');
+const {
+  requestLogger,
+  notFoundMiddleware,
+  errorHandler,
+} = require('./middleware/errorHandler');
 
 if (!process.env.JWT_SECRET) {
-  console.error(
-    '[PairPad Backend] JWT_SECRET is not set. Refusing to start without a signing secret.'
-  );
+  logger.error('JWT_SECRET is not set. Refusing to start without a signing secret.');
   process.exit(1);
 }
 
@@ -42,22 +47,46 @@ const corsOptions = {
   credentials: true,
 };
 
-// Security headers with Helmet
+// Security headers with Helmet.
+// CSP is enabled for production-grade hardening. `connect-src` allows self plus
+// the Socket.IO endpoint; dev-tools/WebSockets are covered by 'self' and 'ws:'.
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Disabled to prevent blocking dev tools & WebSocket connections
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
   })
 );
 
 app.use(cors(corsOptions));
+app.use(requestLogger);
 
 // Parse JSON bodies
 app.use(express.json({ limit: '1mb' })); // Limit body size
 
-// Health check route (no rate limiting)
+// Liveness probe — the process is up.
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'pairpad-backend' });
+  res.json({ status: 'ok', service: 'pairpad-backend', uptime: process.uptime() });
+});
+
+// Readiness probe — the process can serve traffic (DB reachable).
+app.get('/ready', async (_req, res) => {
+  const dbState = mongoose.connection.readyState; // 1 = connected
+  if (dbState === 1) {
+    return res.json({ status: 'ready', db: 'connected' });
+  }
+  res.status(503).json({ status: 'not_ready', db: 'disconnected' });
 });
 
 // General API rate limiter must run before the routes it protects
@@ -98,37 +127,62 @@ async function startServer() {
     await connectDB();
 
     server.listen(PORT, () => {
-      console.log(`[PairPad Backend] Server running on port ${PORT}`);
-      console.log(`[PairPad Backend] Health endpoint: http://localhost:${PORT}/health`);
-      console.log(`[PairPad Backend] API routes: /api/auth/*, /api/rooms/*, /api/messages/*`);
-      console.log(`[PairPad Backend] Socket.IO ready for real-time collaboration`);
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`Health endpoint: http://localhost:${PORT}/health`);
+      logger.info(`Readiness endpoint: http://localhost:${PORT}/ready`);
+      logger.info(`API routes: /api/auth/*, /api/rooms/*, /api/messages/*`);
+      logger.info('Socket.IO ready for real-time collaboration');
     });
   } catch (error) {
-    console.error('[PairPad Backend] Failed to start server:', error.message);
+    logger.error('Failed to start server', { message: error.message });
     process.exit(1);
   }
 }
 
 // Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('[PairPad Backend] SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('[PairPad Backend] Server closed');
-    process.exit(0);
+let shuttingDown = false;
+const shutdown = (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} received, shutting down gracefully...`);
+
+  io.close(() => {
+    server.close(() => {
+      logger.info('Server closed');
+      process.exit(0);
+    });
   });
-});
+
+  // Force-exit if graceful close hangs.
+  setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000).unref();
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 process.on('uncaughtException', (error) => {
-  console.error('[PairPad Backend] Uncaught exception:', error.message);
+  logger.error('Uncaught exception', { stack: error.stack });
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
   const message = reason instanceof Error ? reason.stack || reason.message : reason;
-  console.error('[PairPad Backend] Unhandled promise rejection:', message);
+  logger.error('Unhandled promise rejection', { message });
   process.exit(1);
 });
 
+// Expose a close helper for integration tests.
+app.close = (cb) => {
+  if (io) io.close();
+  server.close(cb);
+};
+
+// Start the server (connects to MongoDB first). Integration tests only require
+// this module after confirming MongoDB is reachable, mirroring the original
+// behaviour.
 startServer();
 
 module.exports = app;

@@ -265,7 +265,9 @@ body {
   border-radius: 8px;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .room-card:hover {

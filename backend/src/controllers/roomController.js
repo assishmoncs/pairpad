@@ -176,6 +176,52 @@ const leaveRoom = async (req, res) => {
   }
 };
 
+// @desc    Transfer room ownership to another member
+// @route   POST /api/rooms/:roomCode/transfer
+// @access  Private (owner only)
+const transferOwnership = async (req, res) => {
+  try {
+    const { userId: nextOwnerId } = req.body;
+    const room = await findRoomByCode(req.params.roomCode);
+
+    if (!room) {
+      return sendError(res, 404, 'Room not found.');
+    }
+
+    if (room.owner.toString() !== req.user._id.toString()) {
+      return sendError(res, 403, 'Only the room owner can transfer ownership.');
+    }
+
+    if (!nextOwnerId || typeof nextOwnerId !== 'string') {
+      return sendError(res, 400, 'A target userId is required to transfer ownership.');
+    }
+
+    // Target must currently be a member and must not be the owner already.
+    const isMember = room.members.some(
+      (member) => member.toString() === nextOwnerId
+    );
+    if (!isMember) {
+      return sendError(res, 400, 'The target user must be a member of the room.');
+    }
+    if (room.owner.toString() === nextOwnerId) {
+      return sendError(res, 400, 'The target user already owns this room.');
+    }
+
+    // Transfer ownership; keep the new owner in the members list.
+    room.owner = nextOwnerId;
+    await room.save();
+
+    const populatedRoom = await findPopulatedRoomById(room._id);
+    sendSuccess(res, 'Ownership transferred successfully.', { room: populatedRoom });
+  } catch (error) {
+    console.error('Transfer ownership error:', error.message);
+    if (error.name === 'CastError') {
+      return sendError(res, 400, 'Invalid userId.');
+    }
+    sendError(res, 500, 'Failed to transfer ownership. Please try again.');
+  }
+};
+
 // @desc    Delete a room (owner only)
 // @route   DELETE /api/rooms/:roomCode
 // @access  Private
@@ -213,5 +259,6 @@ module.exports = {
   getRoom,
   joinRoom,
   leaveRoom,
+  transferOwnership,
   deleteRoom,
 };

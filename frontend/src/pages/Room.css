@@ -108,22 +108,27 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #dc3545;   /* default: disconnected (red) */
+  background-color: #dc3545; /* default: disconnected (red) */
   flex-shrink: 0;
 }
 
 .status-dot.connected {
-  background-color: #28a745;   /* green */
+  background-color: #28a745; /* green */
 }
 
 .status-dot.reconnecting {
-  background-color: #f59e0b;   /* amber */
+  background-color: #f59e0b; /* amber */
   animation: pulse-amber 1.2s ease-in-out infinite;
 }
 
 @keyframes pulse-amber {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .error-text {

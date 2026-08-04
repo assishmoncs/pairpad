@@ -6,6 +6,7 @@ const {
   getRoom,
   joinRoom,
   leaveRoom,
+  transferOwnership,
   deleteRoom,
 } = require('../controllers/roomController');
 const authMiddleware = require('../middleware/auth');
@@ -27,6 +28,9 @@ router.post('/:roomCode/join', joinRoom);
 
 // POST /api/rooms/:roomCode/leave - Leave a room
 router.post('/:roomCode/leave', leaveRoom);
+
+// POST /api/rooms/:roomCode/transfer - Transfer ownership (owner only)
+router.post('/:roomCode/transfer', transferOwnership);
 
 // DELETE /api/rooms/:roomCode - Delete a room (owner only)
 router.delete('/:roomCode', deleteRoom);

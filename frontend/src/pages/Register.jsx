@@ -12,7 +12,12 @@ const Register = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const { run, pending: loading, error, setError } = useAsyncAction(async () => {
+  const {
+    run,
+    pending: loading,
+    error,
+    setError,
+  } = useAsyncAction(async () => {
     await register(name, email, password);
     navigate('/dashboard');
   }, 'Registration failed. Please try again.');
@@ -38,9 +43,9 @@ const Register = () => {
     <div className="auth-page">
       <div className="auth-container">
         <h1>Create Account</h1>
-        
+
         {error && <div className="error-message">{error}</div>}
-        
+
         <form onSubmit={handleSubmit} className="auth-form">
           <FormField
             id="name"
@@ -50,7 +55,7 @@ const Register = () => {
             placeholder="Enter your name"
             required
           />
-          
+
           <FormField
             id="email"
             label="Email"
@@ -60,7 +65,7 @@ const Register = () => {
             placeholder="Enter your email"
             required
           />
-          
+
           <FormField
             id="password"
             label="Password"
@@ -70,7 +75,7 @@ const Register = () => {
             placeholder="Create a password"
             required
           />
-          
+
           <FormField
             id="confirmPassword"
             label="Confirm Password"
@@ -80,12 +85,12 @@ const Register = () => {
             placeholder="Confirm your password"
             required
           />
-          
+
           <button type="submit" disabled={loading} className="btn-primary">
             {loading ? 'Creating account...' : 'Register'}
           </button>
         </form>
-        
+
         <p className="auth-link">
           Already have an account? <Link to="/login">Login here</Link>
         </p>

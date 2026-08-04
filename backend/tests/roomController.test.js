@@ -19,6 +19,7 @@ const {
   getRoom,
   joinRoom,
   leaveRoom,
+  transferOwnership,
   deleteRoom,
 } = require('../src/controllers/roomController');
 
@@ -410,6 +411,81 @@ describe('leaveRoom', () => {
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
       message: 'Failed to leave room. Please try again.',
+    });
+  });
+});
+
+describe('transferOwnership', () => {
+  it('returns 404 for an unknown room code', async () => {
+    Room.findOne.mockResolvedValue(null);
+    const res = createRes();
+
+    await transferOwnership(createReq({ params: { roomCode: 'ABC123' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('returns 403 for a non-owner', async () => {
+    const room = { owner: { toString: () => OTHER_ID }, members: [] };
+    Room.findOne.mockResolvedValue(room);
+    const res = createRes();
+
+    await transferOwnership(
+      createReq({ params: { roomCode: 'ABC123' }, body: { userId: OTHER_ID } }),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('requires a target userId', async () => {
+    const room = { owner: { toString: () => USER_ID }, members: [] };
+    Room.findOne.mockResolvedValue(room);
+    const res = createRes();
+
+    await transferOwnership(createReq({ params: { roomCode: 'ABC123' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('rejects a target who is not a member', async () => {
+    const room = {
+      owner: { toString: () => USER_ID },
+      members: [{ toString: () => OTHER_ID }],
+    };
+    Room.findOne.mockResolvedValue(room);
+    const res = createRes();
+
+    await transferOwnership(
+      createReq({ params: { roomCode: 'ABC123' }, body: { userId: 'user-3' } }),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('transfers ownership to a member', async () => {
+    const room = {
+      _id: 'room-1',
+      owner: { toString: () => USER_ID },
+      members: [{ toString: () => OTHER_ID }],
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    Room.findOne.mockResolvedValue(room);
+    const fullRoom = { _id: 'room-1', owner: OTHER_ID };
+    Room.findById.mockReturnValue(populated(fullRoom));
+    const res = createRes();
+
+    await transferOwnership(
+      createReq({ params: { roomCode: 'ABC123' }, body: { userId: OTHER_ID } }),
+      res
+    );
+
+    expect(room.owner).toBe(OTHER_ID);
+    expect(room.save).toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'Ownership transferred successfully.',
+      data: { room: fullRoom },
     });
   });
 });

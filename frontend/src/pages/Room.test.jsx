@@ -6,7 +6,7 @@ import Room, { appendUniqueMessage } from './Room';
 import socketService from '../services/socketService';
 
 vi.mock('@monaco-editor/react', () => ({
-  default: ({ value, onMount }) => {
+  default: function MockEditor({ value, onMount }) {
     React.useEffect(() => {
       onMount?.({});
     }, [onMount]);
@@ -107,7 +107,6 @@ describe('appendUniqueMessage', () => {
 
     confirmSpy.mockRestore();
   });
-
 });
 
 describe('Room loading', () => {

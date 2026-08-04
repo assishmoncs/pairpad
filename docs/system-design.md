@@ -48,7 +48,7 @@ Express + Socket.IO (Helmet + Rate Limiting) ---- MongoDB (Users, Rooms, Message
 ### Code Execution
 - Server-side only (API key never exposed to client)
 - Primary: Judge0 CE API supporting JS, TS, Python, Java, C/C++, Go, Rust, PHP, Ruby
-- Fallback: Local sandboxed runner for JS, TS, and Python with 5s execution timeout and 1MB buffer cap
+- Fallback: Local runner for JS, TS, and Python — a child process with a **scrubbed environment** (no app secrets), 5s timeout, 128 MB heap cap, and 1 MB output cap. It is a resource guard, **not** a full sandbox, and is disabled in production unless `ALLOW_LOCAL_EXECUTION=true`.
 - Supports custom `stdin` inputs passed from the frontend UI
 
 ## Data Flow
@@ -59,6 +59,24 @@ Express + Socket.IO (Helmet + Rate Limiting) ---- MongoDB (Users, Rooms, Message
 4. Monaco edits emit `code-change`; peers receive updates, and room `snapshotCode` is persisted to DB.
 5. Chat messages are saved to MongoDB and broadcast with stringified IDs.
 6. Run Code posts to `/api/execute` with code and optional `stdin`; execution output is returned and broadcast.
+
+## Production Hardening (implemented)
+
+- **Centralized error handling:** all unexpected errors route through a global
+  handler; responses carry stable machine-readable `code` values and a
+  `requestId` for correlation.
+- **Structured logging:** a small logger (`src/utils/logger.js`) emits
+  human-readable logs in development and JSON lines in production; every
+  request is tagged with a `requestId`.
+- **Health/readiness probes:** `GET /health` (liveness) and `GET /ready`
+  (DB-connected readiness) for orchestrators and load balancers.
+- **Socket protection:** per-IP connection rate limiting, JWT-authenticated
+  handshakes, membership checks on join, and **debounced** editor snapshot
+  persistence (coalesces rapid keystrokes into a single MongoDB write).
+- **CI/CD:** GitHub Actions runs lint, format, test (with coverage thresholds),
+  and build on every push/PR for both apps.
+- **Ownership transfer:** `POST /api/rooms/:roomCode/transfer` lets an owner
+  hand the room to another member so rooms can be handed off without deletion.
 
 ## MVP Limitations
 

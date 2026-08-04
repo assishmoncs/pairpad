@@ -68,7 +68,7 @@ describe('errorHandler', () => {
     });
   });
 
-  it('uses the status code and message from an ApiError', () => {
+  it('uses the status code, message, and derived code from an ApiError', () => {
     const res = createRes();
 
     errorHandler(new ApiError(403, 'Forbidden'), {}, res, jest.fn());
@@ -76,6 +76,7 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({
       status: 'fail',
+      code: 'ERR_403',
       message: 'Forbidden',
     });
   });
@@ -87,6 +88,7 @@ describe('errorHandler', () => {
 
     expect(res.json).toHaveBeenCalledWith({
       status: 'fail',
+      code: 'ERR_400',
       message: 'Invalid',
       errors: ['a', 'b'],
     });
@@ -106,7 +108,8 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
       status: 'fail',
-      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      message: 'Validation failed.',
       errors: ['Name is required', 'Email is invalid'],
     });
   });
@@ -122,6 +125,7 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
       status: 'fail',
+      code: 'DUPLICATE_KEY',
       message: 'Duplicate value for field: email',
     });
   });
@@ -136,6 +140,7 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
       status: 'fail',
+      code: 'INVALID_ID',
       message: 'Invalid ID format',
     });
   });
@@ -150,6 +155,7 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
       status: 'fail',
+      code: 'INVALID_TOKEN',
       message: 'Invalid token',
     });
   });
@@ -164,6 +170,7 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
       status: 'fail',
+      code: 'TOKEN_EXPIRED',
       message: 'Token expired',
     });
   });
@@ -171,7 +178,6 @@ describe('errorHandler', () => {
   it('includes the stack trace in development', () => {
     process.env.NODE_ENV = 'development';
     const res = createRes();
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     const err = new ApiError(400, 'Oops');
 
     errorHandler(err, {}, res, jest.fn());
@@ -179,7 +185,15 @@ describe('errorHandler', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ stack: err.stack })
     );
-    expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
+  });
+
+  it('echoes the request id when present for correlation', () => {
+    const res = createRes();
+
+    errorHandler(new ApiError(500, 'Boom'), { requestId: 'req-123' }, res, jest.fn());
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'req-123' })
+    );
   });
 });

@@ -109,8 +109,7 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
-  const login = (email, password) =>
-    authenticate('/api/auth/login', { email, password });
+  const login = (email, password) => authenticate('/api/auth/login', { email, password });
 
   const register = (name, email, password) =>
     authenticate('/api/auth/register', { name, email, password });

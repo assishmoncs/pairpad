@@ -15,7 +15,11 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const CONFIGURED_LEVEL = (process.env.LOG_LEVEL || (IS_PROD ? 'info' : 'debug')).toLowerCase();
 
 function shouldLog(level) {
-  return LEVELS.indexOf(level) >= LEVELS.indexOf(CONFIGURED_LEVEL);
+  const levelIdx = LEVELS.indexOf(level);
+  const configIdx = LEVELS.indexOf(CONFIGURED_LEVEL);
+  if (levelIdx === -1) return true;
+  if (configIdx === -1) return true;
+  return levelIdx <= configIdx;
 }
 
 function serialize(args) {

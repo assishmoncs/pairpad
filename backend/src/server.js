@@ -107,6 +107,16 @@ app.use(errorHandler);
 // Create HTTP server from Express app
 const server = http.createServer(app);
 
+// Handle server listen errors (e.g. EADDRINUSE)
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`Port ${PORT} is already in use by another process. Please free port ${PORT} or update PORT in .env.`);
+  } else {
+    logger.error('Server error', { message: error.message });
+  }
+  process.exit(1);
+});
+
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {

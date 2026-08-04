@@ -65,10 +65,8 @@ const Dashboard = () => {
         language: newRoomLanguage,
         description: newRoomDescription,
       });
-      
-      setRooms((currentRooms) =>
-        upsertRoomAtTop(currentRooms, response.data.data.room)
-      );
+
+      setRooms((currentRooms) => upsertRoomAtTop(currentRooms, response.data.data.room));
       setShowCreateForm(false);
       setNewRoomName('');
       setNewRoomLanguage(DEFAULT_LANGUAGE);
@@ -77,16 +75,6 @@ const Dashboard = () => {
       setError(getErrorMessage(err, 'Failed to create room.'));
     } finally {
       setCreating(false);
-    }
-  };
-
-  const handleJoinRoom = async (roomCode) => {
-    try {
-      setError('');
-      await axios.post(`/api/rooms/${roomCode}/join`);
-      navigate(`/room/${roomCode}`);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to join room.'));
     }
   };
 
@@ -122,7 +110,9 @@ const Dashboard = () => {
     <div className="dashboard">
       <header className="dashboard-header">
         <h1>Welcome, {user?.name}!</h1>
-        <button onClick={logout} className="btn-secondary">Logout</button>
+        <button onClick={logout} className="btn-secondary">
+          Logout
+        </button>
       </header>
 
       {error && <div className="error-message">{error}</div>}
@@ -179,7 +169,7 @@ const Dashboard = () => {
                 placeholder="Enter room name"
                 required
               />
-              
+
               <div className="form-group">
                 <label htmlFor="language">Language</label>
                 <LanguageSelect
@@ -187,7 +177,7 @@ const Dashboard = () => {
                   onChange={(e) => setNewRoomLanguage(e.target.value)}
                 />
               </div>
-              
+
               <FormField
                 id="description"
                 label="Description (optional)"
@@ -196,7 +186,7 @@ const Dashboard = () => {
                 placeholder="Brief description"
                 maxLength={200}
               />
-              
+
               <button type="submit" disabled={creating} className="btn-primary">
                 {creating ? 'Creating...' : 'Create Room'}
               </button>
@@ -210,11 +200,13 @@ const Dashboard = () => {
               {rooms.map((room) => (
                 <div key={getRoomKey(room)} className="room-card">
                   <h3>{room.name}</h3>
-                  <p className="room-code">Code: <strong>{room.roomCode}</strong></p>
+                  <p className="room-code">
+                    Code: <strong>{room.roomCode}</strong>
+                  </p>
                   <p className="room-language">Language: {room.language}</p>
                   <p className="room-members">Members: {room.members?.length || 1}</p>
                   <div className="room-actions">
-                    <button 
+                    <button
                       onClick={() => handleNavigateToRoom(room.roomCode)}
                       className="btn-primary"
                     >

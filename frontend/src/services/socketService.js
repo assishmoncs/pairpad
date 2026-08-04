@@ -154,10 +154,7 @@ class SocketService {
         // 'io client disconnect' is an intentional local disconnect — reject too.
         // Transient disconnects during reconnection should not reject here because
         // the 'connect' event will fire again on the next successful attempt.
-        if (
-          reason === 'io server disconnect' ||
-          reason === 'io client disconnect'
-        ) {
+        if (reason === 'io server disconnect' || reason === 'io client disconnect') {
           done(reject, new Error(reason || 'Disconnected from collaboration server.'));
         }
         // Otherwise just wait — reconnection is in progress.

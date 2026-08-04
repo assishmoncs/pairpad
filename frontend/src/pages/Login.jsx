@@ -10,7 +10,11 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const { run, pending: loading, error } = useAsyncAction(async () => {
+  const {
+    run,
+    pending: loading,
+    error,
+  } = useAsyncAction(async () => {
     await login(email, password);
     navigate('/dashboard');
   }, 'Login failed. Please try again.');
@@ -24,9 +28,9 @@ const Login = () => {
     <div className="auth-page">
       <div className="auth-container">
         <h1>Login to PairPad</h1>
-        
+
         {error && <div className="error-message">{error}</div>}
-        
+
         <form onSubmit={handleSubmit} className="auth-form">
           <FormField
             id="email"
@@ -37,7 +41,7 @@ const Login = () => {
             placeholder="Enter your email"
             required
           />
-          
+
           <FormField
             id="password"
             label="Password"
@@ -47,12 +51,12 @@ const Login = () => {
             placeholder="Enter your password"
             required
           />
-          
+
           <button type="submit" disabled={loading} className="btn-primary">
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-        
+
         <p className="auth-link">
           Don't have an account? <Link to="/register">Register here</Link>
         </p>

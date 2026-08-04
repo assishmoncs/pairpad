@@ -4,5 +4,4 @@
  * @param {string} fallback - Message shown when the API did not provide one.
  * @returns {string}
  */
-export const getErrorMessage = (error, fallback) =>
-  error?.response?.data?.message || fallback;
+export const getErrorMessage = (error, fallback) => error?.response?.data?.message || fallback;

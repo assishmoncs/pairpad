@@ -8,6 +8,7 @@ const mockHandlerNames = [
   'getRoom',
   'joinRoom',
   'leaveRoom',
+  'transferOwnership',
   'deleteRoom',
   'executeCode',
 ];
@@ -30,6 +31,7 @@ jest.mock('../src/controllers/roomController', () => ({
   getRoom: (...args) => mockHandlers.getRoom(...args),
   joinRoom: (...args) => mockHandlers.joinRoom(...args),
   leaveRoom: (...args) => mockHandlers.leaveRoom(...args),
+  transferOwnership: (...args) => mockHandlers.transferOwnership(...args),
   deleteRoom: (...args) => mockHandlers.deleteRoom(...args),
 }));
 jest.mock('../src/controllers/executeController', () => ({
@@ -86,6 +88,7 @@ describe('room routes', () => {
     ['get', '/api/rooms/ABC123', 'getRoom', { identifier: 'ABC123' }],
     ['post', '/api/rooms/ABC123/join', 'joinRoom', { roomCode: 'ABC123' }],
     ['post', '/api/rooms/ABC123/leave', 'leaveRoom', { roomCode: 'ABC123' }],
+    ['post', '/api/rooms/ABC123/transfer', 'transferOwnership', { roomCode: 'ABC123' }],
     ['delete', '/api/rooms/ABC123', 'deleteRoom', { roomCode: 'ABC123' }],
   ])('%s %s reaches %s behind auth', async (method, path, handler, params) => {
     const response = await request(app)[method](path).send({});

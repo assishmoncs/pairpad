@@ -5,7 +5,6 @@ const { sendSuccess, sendError } = require('../utils/apiResponse');
 const { ROLES, getMemberRole } = require('../utils/roomPermissions');
 const { findRoomByCode, isRoomParticipant } = require('../utils/roomAccess');
 const { listRevisions, findRevision, createRevision, clearAutomaticCheckpoint } = require('../services/revisionService');
-const { createInitialState, serializeState } = require('../services/textCrdt');
 const { replaceDocumentState } = require('../sockets/crdtSocketHandler');
 
 const requireMember = async (roomCode, userId) => {
@@ -88,15 +87,7 @@ const restoreRevision = async (req, res) => {
     await Room.updateOne({ _id: room._id }, { $set: { snapshotCode: revision.content, language: revision.language, crdtState: liveState } });
     const restoreRevisionRecord = await createRevision({ room: room._id, author: req.user._id, content: revision.content, language: revision.language, message: `Restored revision ${revision._id}`, source: 'restore', restoredFrom: revision._id });
 
-    req.app.get('io')?.to(`room:${room.roomCode}`).emit('document-restored', {
-      roomCode: room.roomCode,
-      state: liveState,
-      content: revision.content,
-      language: revision.language,
-      restoredFrom: revision._id.toString(),
-      restoredBy: req.user._id.toString(),
-      revisionId: restoreRevisionRecord._id.toString(),
-    });
+    req.app.get('io')?.to(`room:${room.roomCode}`).emit('document-restored', { roomCode: room.roomCode, state: liveState, content: revision.content, language: revision.language, restoredFrom: revision._id.toString(), restoredBy: req.user._id.toString(), revisionId: restoreRevisionRecord._id.toString() });
 
     const populatedRestore = await Revision.findById(restoreRevisionRecord._id).populate('author', 'name email').lean();
     sendSuccess(res, 'Revision restored successfully.', { revision: populatedRestore });

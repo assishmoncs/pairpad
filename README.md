@@ -12,49 +12,27 @@
 
 </div>
 
-PairPad is a full-stack collaborative coding platform built around Monaco Editor, Socket.IO, a conflict-free sequence CRDT, persistent room state and revision history, remote cursors, role-based access, and integrated code execution. Multiple users can join a room, edit the same document concurrently, compare revisions, restore a previous checkpoint, chat, execute code, and collaborate directly in the browser.
+PairPad is a full-stack collaborative coding platform built around Monaco Editor, Socket.IO, a conflict-free sequence CRDT, persistent room state and revision history, remote cursors, role-based access, integrated code execution, multi-file workspaces, technical interview workflows, Redis scaling, and operational quality gates. Multiple users can join a room, edit files concurrently, compare revisions, restore checkpoints, chat, execute code, and collaborate directly in the browser.
 
 ## Features
 
 | Category | What It Does |
 |---|---|
-| **Authentication** | Register, login, JWT access/refresh sessions |
+| **Authentication** | Register, login, short-lived access tokens, rotating HttpOnly refresh sessions, logout-all |
 | **Rooms** | Create, join, leave, delete, transfer ownership, and manage member roles |
 | **Live Editing** | Monaco Editor backed by a deterministic sequence CRDT; concurrent edits converge without last-write-wins document replacement |
 | **Remote Cursors** | Throttled cursor/selection broadcasting with deterministic collaborator colors and hover names |
-| **Presence** | Real-time list of connected room members with reconnect cleanup |
+| **Presence** | Real-time connected-member state with reconnect cleanup and optional Redis distribution |
 | **Roles** | Owner, editor, and viewer permissions enforced by REST and Socket.IO and mirrored by the UI |
 | **Revision History** | Automatic checkpoints, manual checkpoints, comparisons, authorship metadata, and owner-only restore |
+| **Workspace** | Multi-file tree with create, rename, delete, language detection, and per-file CRDT state |
+| **Interview Mode** | Problem statements, candidate assignment, timer, lifecycle controls, public samples, and private hidden tests |
 | **Chat** | MongoDB-backed persistent room messaging with real-time delivery |
-| **Code Execution** | Judge0 integration with guarded local JS/TS/Python fallback |
-| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement |
-| **Resilience** | Socket reconnection, room rejoin, CRDT state recovery, document restore propagation, health/readiness probes |
-| **Observability** | Structured request logs, request IDs, latency counters, status-class counters, and protected Prometheus metrics |
-
-## Room roles
-
-| Role | View | Edit | Execute | Create checkpoint | Manage members | Transfer ownership | Restore | Delete room |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Owner | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Editor | Yes | Yes | Yes | Yes | No | No | No | No |
-| Viewer | Yes | No | No | No | No | No | No | No |
-
-The server remains authoritative; hiding UI controls is never used as a security boundary.
-
-## Revision history
-
-PairPad persists immutable document checkpoints separately from the live CRDT state. Automatic checkpoints are throttled to avoid turning every keystroke into a MongoDB write. Editors and owners can create named checkpoints, members can browse history, revisions can be compared, and only owners can restore a previous revision. A restore rebuilds the document's CRDT baseline and broadcasts the new authoritative state to connected clients.
-
-## Tech Stack
-
-| Layer | Technologies |
-|---|---|
-| **Frontend** | React 18, Vite, React Router v6, Axios, Socket.IO Client, Monaco Editor |
-| **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet |
-| **Collaboration** | Dependency-free sequence CRDT over authenticated Socket.IO transport |
-| **Code Execution** | Judge0 CE · guarded local Node.js / Python fallback |
-| **Testing** | Jest + Supertest · Vitest + Testing Library · Playwright |
-| **Tooling** | ESLint + Prettier · GitHub Actions · CodeQL · Dependabot |
+| **Code Execution** | Judge0 integration with optional isolated worker execution for supported languages |
+| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, token rotation |
+| **Resilience** | Socket reconnection, room rejoin, CRDT recovery, document restore propagation, health/readiness probes |
+| **Observability** | Structured logs, request correlation, protected Prometheus-compatible metrics, performance budgets |
+| **Performance** | API p95/error-rate budget and frontend JavaScript bundle-size budget executed in CI |
 
 ## Quick Start
 
@@ -91,37 +69,60 @@ Frontend: `http://localhost:5173`.
 docker compose up --build
 ```
 
-The Compose stack includes MongoDB, backend, and frontend, with health checks and local code execution disabled by default.
+The Compose stack includes MongoDB, Redis, backend, frontend, and the isolated execution worker. Local host execution remains disabled by default.
 
-## Environment Variables
+## API Reference
 
-See `backend/.env.example` for the complete configuration. Production must keep `ALLOW_LOCAL_EXECUTION` unset and use a fully isolated execution service. Set `METRICS_TOKEN` to protect the Prometheus-compatible `/metrics` endpoint.
+The checked-in OpenAPI contract is available at `docs/openapi.yaml`. When the backend is running:
 
-## Operational Metrics
+- `/api/openapi.yaml` — machine-readable contract
+- `/api/docs` — API documentation landing page
 
-The backend exposes `/metrics` in Prometheus text format with process uptime, in-flight requests, completed requests, average request duration, total request count, method counters, and status-class counters. In production, the endpoint returns `404` unless a valid `METRICS_TOKEN` is supplied using either `X-Metrics-Token` or `Authorization: Bearer ...`.
+See `docs/API.md` for the endpoint guide.
+
+## Testing and quality
+
+```bash
+# backend
+cd backend
+npm test
+npm run lint
+npm run perf
+
+# frontend
+cd ../frontend
+npm test
+npm run lint
+npm run format:check
+npm run perf
+npm run test:e2e
+```
+
+Performance budgets are described in `docs/PERFORMANCE.md`. CI runs functional, security, browser, and performance gates with MongoDB and Redis services.
 
 ## Project Structure
 
 ```text
 pairpad/
 ├── backend/
+│   ├── scripts/             # Performance/load budget checks
 │   ├── src/
-│   │   ├── controllers/     # Auth, rooms, execution, revisions
+│   │   ├── controllers/     # Auth, rooms, execution, revisions, interviews, workspace
 │   │   ├── middleware/      # Auth, limits, request/error handling
-│   │   ├── models/          # User, Room, Message, Revision
+│   │   ├── models/          # User, Room, Message, Revision, WorkspaceFile, RefreshSession
 │   │   ├── routes/          # REST routes
-│   │   ├── services/        # Execution, CRDT, revision services
-│   │   └── utils/            # Validation, auth, access, logging, metrics
+│   │   ├── services/        # Execution, CRDT, Redis, history, workspace
+│   │   ├── sockets/         # Socket.IO collaboration and scaling
+│   │   └── utils/           # Validation, auth, access, logging, metrics
 │   └── tests/
 ├── frontend/
 │   └── src/
-│       ├── components/      # Room panels, history, members, execution, chat
-│       ├── context/          # AuthContext
-│       ├── hooks/            # Collaboration, CRDT, cursors, chat, execution
+│       ├── components/      # Room panels, history, members, execution, chat, interview, workspace
+│       ├── context/         # AuthContext
+│       ├── hooks/           # Collaboration, CRDT, cursors, chat, execution
 │       ├── pages/
-│       ├── routes/
 │       └── services/
+├── execution-worker/        # Isolated execution service
 ├── .github/workflows/
 ├── docs/
 ├── docker-compose.yml
@@ -129,90 +130,6 @@ pairpad/
 ├── SECURITY.md
 └── LICENSE
 ```
-
-## API Reference
-
-### Authentication
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/api/auth/register` | — | Create account |
-| POST | `/api/auth/login` | — | Authenticate |
-| POST | `/api/auth/refresh` | — | Refresh access token |
-| GET | `/api/auth/me` | Bearer | Get current user |
-
-### Rooms
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/api/rooms` | Bearer | Create a room |
-| GET | `/api/rooms` | Bearer | List user's rooms |
-| GET | `/api/rooms/:identifier` | Bearer | Get a room |
-| POST | `/api/rooms/:roomCode/join` | Bearer | Join a room |
-| POST | `/api/rooms/:roomCode/leave` | Bearer | Leave a room |
-| PATCH | `/api/rooms/:roomCode/members/:userId/role` | Owner | Set editor/viewer role |
-| POST | `/api/rooms/:roomCode/transfer` | Owner | Transfer ownership |
-| DELETE | `/api/rooms/:roomCode` | Owner | Delete a room |
-
-### History
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/rooms/:roomCode/history` | Member | List revisions |
-| GET | `/api/rooms/:roomCode/history/diff?from=&to=` | Member | Compare two revisions |
-| POST | `/api/rooms/:roomCode/history` | Editor/Owner | Create manual checkpoint |
-| POST | `/api/rooms/:roomCode/history/:revisionId/restore` | Owner | Restore a revision |
-
-### Health & Operations
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/health` | Liveness |
-| GET | `/ready` | MongoDB / Redis readiness |
-| GET | `/metrics` | Prometheus-compatible operational metrics; protected in production |
-
-### Messages & Execution
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/messages/room/:roomCode` | Bearer | Chat history |
-| POST | `/api/execute` | Editor/Owner | Execute code |
-
-## Socket.IO Events
-
-All connections require an authenticated JWT handshake. Room membership is checked on join, and editor permissions are checked for code writes.
-
-### Client → Server
-
-| Event | Payload | Permission |
-|---|---|---|
-| `join-room` | `{ roomCode }` | Member |
-| `leave-room` | — | Member |
-| `crdt-sync-request` | `{}` | Member |
-| `crdt-operation` | CRDT replace operation | Editor/Owner |
-| `code-change` | `{ content, language }` | Editor/Owner (legacy clients) |
-| `cursor-update` | `{ position, selection }` | Member |
-| `chat-message` | `{ content }` | Member |
-
-### Server → Client
-
-| Event | Payload | Description |
-|---|---|---|
-| `crdt-sync` | `{ state, version, role }` | Authoritative CRDT state |
-| `crdt-operation` | CRDT operation | Merged collaborative edit |
-| `presence-update` | `{ users[] }` | Connected members |
-| `cursor-update` | `{ userId, position, selection }` | Remote cursor |
-| `member-role-updated` | `{ userId, role }` | Permission change |
-| `document-restored` | `{ state, content, language, revisionId }` | Restored authoritative document |
-| `chat-message` | `{ _id, content, sender, createdAt }` | New message |
-| `code-execution-result` | `{ result, executedBy, language }` | Execution result |
-| `room-deleted` | `{ roomCode }` | Room removed |
-
-## Testing
-
-Backend: `npm test` · frontend: `npm test` / `npm run test:coverage` · browser: `npx playwright test`.
-
-Focused suites cover CRDT convergence, RBAC, revision schema/checkpoint policy, cursors, room member management, execution isolation, and security flows. Full E2E verification runs against MongoDB and Redis in CI.
 
 ## Quality Roadmap
 
@@ -227,13 +144,16 @@ Focused suites cover CRDT convergence, RBAC, revision schema/checkpoint policy, 
 - [x] Isolated execution worker integration
 - [x] Playwright E2E and adversarial security suites
 - [x] OpenAPI contract
-- [ ] Interview mode with hidden test cases
+- [x] Interview mode with hidden test cases
 - [x] Multi-file workspace
 - [x] Observability baseline
-- [ ] Performance budgets and load-test gates
+- [x] Performance budgets and load-test smoke gates
 - [ ] Accessibility automated gate
+- [ ] Production deployment promotion/rollback automation
+- [ ] Consolidate workspace/interview OpenAPI fragments into the main contract
+- [ ] Full production-grade sandbox fleet with dedicated hosts and stronger isolation
 
-See `docs/RBAC.md`, `docs/system-design.md`, `docs/DEPLOYMENT.md`, and `docs/QUALITY_BASELINE.md`.
+See `docs/QUALITY_BASELINE.md`, `docs/SECURITY.md`, `docs/PERFORMANCE.md`, `docs/OBSERVABILITY.md`, `docs/DEPLOYMENT.md`, and `docs/system-design.md`.
 
 ## License
 

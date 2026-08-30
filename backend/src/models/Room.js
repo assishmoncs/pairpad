@@ -1,5 +1,21 @@
 const mongoose = require('mongoose');
 
+const roomMemberSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ['owner', 'editor', 'viewer'],
+      default: 'editor',
+    },
+  },
+  { _id: false }
+);
+
 const roomSchema = new mongoose.Schema(
   {
     name: {
@@ -22,12 +38,8 @@ const roomSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    members: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
+    members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    memberRoles: { type: [roomMemberSchema], default: [] },
     language: {
       type: String,
       default: 'javascript',
@@ -43,27 +55,37 @@ const roomSchema = new mongoose.Schema(
       default: '',
       maxlength: [524288, 'Code snapshot cannot exceed 512KB'],
     },
-    // Serialized dependency-free sequence-CRDT state. The plain snapshot above
-    // remains as a compatibility/read-recovery representation for older clients.
     crdtState: {
       type: String,
       default: '',
       maxlength: [4194304, 'CRDT state cannot exceed 4MB'],
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// Ensure owner is always in members list
 roomSchema.pre('save', function (next) {
-  if (this.isNew && !this.members.includes(this.owner)) {
+  const ownerId = this.owner?.toString();
+  const roles = new Map((this.memberRoles || []).map((entry) => [entry.user.toString(), entry.role]));
+
+  if (!this.members.some((memberId) => memberId.toString() === ownerId)) {
     this.members.push(this.owner);
   }
+
+  for (const memberId of this.members || []) {
+    const id = memberId.toString();
+    if (!roles.has(id)) {
+      this.memberRoles.push({ user: memberId, role: id === ownerId ? 'owner' : 'editor' });
+    }
+  }
+
+  const ownerRole = this.memberRoles.find((entry) => entry.user.toString() === ownerId);
+  if (ownerRole) ownerRole.role = 'owner';
+
   next();
 });
 
 roomSchema.index({ members: 1, createdAt: -1 });
+roomSchema.index({ 'memberRoles.user': 1, createdAt: -1 });
 
 module.exports = mongoose.model('Room', roomSchema);

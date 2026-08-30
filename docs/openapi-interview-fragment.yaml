@@ -1,0 +1,79 @@
+# Merge these paths/components into docs/openapi.yaml when updating the published contract.
+paths:
+  /api/rooms/{roomCode}/interview:
+    get:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { description: Member-safe interview state }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InterviewConfig' }
+      responses:
+        '200': { description: Interview configured }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/interview/start:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses: { '200': { description: Interview started } }
+  /api/rooms/{roomCode}/interview/pause:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses: { '200': { description: Interview paused } }
+  /api/rooms/{roomCode}/interview/resume:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses: { '200': { description: Interview resumed } }
+  /api/rooms/{roomCode}/interview/end:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses: { '200': { description: Interview ended } }
+  /api/rooms/{roomCode}/interview/submit:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceCode, language]
+              properties:
+                sourceCode: { type: string, maxLength: 51200 }
+                language: { type: string }
+      responses:
+        '200': { description: Public results plus redacted hidden-test results }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+components:
+  schemas:
+    InterviewTest:
+      type: object
+      required: [name, stdin, expectedOutput]
+      properties:
+        name: { type: string, maxLength: 100 }
+        stdin: { type: string, maxLength: 10000 }
+        expectedOutput: { type: string, maxLength: 10000 }
+    InterviewConfig:
+      type: object
+      required: [title, description, durationMinutes, language]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, minLength: 1, maxLength: 5000 }
+        durationMinutes: { type: integer, minimum: 1, maximum: 1440 }
+        language: { type: string, enum: [javascript, python, java, cpp, c, go, rust, typescript, php, ruby] }
+        candidateId: { type: string, nullable: true }
+        publicTests: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/InterviewTest' } }
+        hiddenTests: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/InterviewTest' } }

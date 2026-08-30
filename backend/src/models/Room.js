@@ -43,6 +43,13 @@ const roomSchema = new mongoose.Schema(
       default: '',
       maxlength: [524288, 'Code snapshot cannot exceed 512KB'],
     },
+    // Serialized dependency-free sequence-CRDT state. The plain snapshot above
+    // remains as a compatibility/read-recovery representation for older clients.
+    crdtState: {
+      type: String,
+      default: '',
+      maxlength: [4194304, 'CRDT state cannot exceed 4MB'],
+    },
   },
   {
     timestamps: true,

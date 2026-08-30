@@ -5,6 +5,7 @@ const { getUserFromToken } = require('../utils/tokenAuth');
 const { findRoomByCode, isRoomParticipant, normalizeRoomCode, getRoomRole } = require('../utils/roomAccess');
 const { canEdit } = require('../utils/roomPermissions');
 const redisPresence = require('../services/redisPresenceServiceV2');
+const { sanitizePublicInterview, sanitizeHostInterview } = require('../services/interviewService');
 
 const roomPresence = new Map();
 const MAX_CODE_SIZE = 512 * 1024;
@@ -12,7 +13,7 @@ const SOCKET_WINDOW_MS = 60 * 1000;
 const SOCKET_MAX_CONNECTIONS = 20;
 const connectionAttempts = new Map();
 const EVENT_RATE_WINDOW_MS = 60 * 1000;
-const EVENT_RATE_LIMITS = { 'code-change': 120, 'chat-message': 30, 'cursor-update': 300 };
+const EVENT_RATE_LIMITS = { 'code-change': 120, 'chat-message': 30, 'cursor-update': 300, 'interview-event': 20 };
 const snapshotTimers = new Map();
 const SNAPSHOT_DEBOUNCE_MS = 500;
 const PRESENCE_HEARTBEAT_MS = 30000;
@@ -20,7 +21,7 @@ const PRESENCE_HEARTBEAT_MS = 30000;
 setInterval(() => {
   const windowStart = Date.now() - SOCKET_WINDOW_MS;
   for (const [ip, attempts] of connectionAttempts.entries()) {
-    const valid = attempts.filter((time) => time >= windowStart);
+    const valid = attempts.filter((t) => t >= windowStart);
     if (valid.length) connectionAttempts.set(ip, valid);
     else connectionAttempts.delete(ip);
   }
@@ -83,11 +84,9 @@ const handleLeaveRoom = async (io, socket) => {
   if (!socket.currentRoom) return;
   const roomCode = socket.currentRoom;
   flushSnapshot(socket.id);
-
   const local = getLocalPresence(roomCode);
   local.delete(socket.id);
   await redisPresence.remove(roomCode, socket.id);
-
   socket.leave(`room:${roomCode}`);
   socket.to(`room:${roomCode}`).emit('user-left', socketIdentity(socket));
   await broadcastPresence(io, roomCode);
@@ -121,32 +120,36 @@ const initializeSocket = (io) => {
         if (!room) return callback?.({ error: 'Room not found.' });
         if (!isRoomParticipant(room, socket.user._id)) return callback?.({ error: 'You are not authorized to join this room.' });
         if (socket.currentRoom && socket.currentRoom !== normalized) await handleLeaveRoom(io, socket);
-
         socket.join(`room:${normalized}`);
         socket.currentRoom = normalized;
         const identity = { ...socketIdentity(socket), socketId: socket.id };
         getLocalPresence(normalized).set(socket.id, identity);
         await redisPresence.upsert(normalized, socket.id, identity);
-
         socket.to(`room:${normalized}`).emit('user-joined', socketIdentity(socket));
         await broadcastPresence(io, normalized);
-
         socket._presenceTimer = setInterval(async () => {
           if (!socket.currentRoom) return;
           try { await redisPresence.refresh(socket.currentRoom, socket.id); } catch (error) { logger.warn('Presence heartbeat failed', { message: error.message }); }
         }, PRESENCE_HEARTBEAT_MS);
         socket._presenceTimer.unref?.();
-
         const users = await listPresence(normalized);
-        callback?.({
-          success: true,
-          room: { roomCode: normalized, name: room.name, language: room.language },
-          users,
-          role: getRoomRole(room, socket.user._id),
-        });
+        callback?.({ success: true, room: { roomCode: normalized, name: room.name, language: room.language }, users, role: getRoomRole(room, socket.user._id) });
       } catch (error) {
         logger.error('Error joining room', { message: error.message });
         callback?.({ error: 'Failed to join room.' });
+      }
+    });
+
+    socket.on('interview-state-request', async (_data, callback) => {
+      try {
+        if (!socket.currentRoom) return callback?.({ error: 'Not in a room.' });
+        const room = await findRoomByCode(socket.currentRoom);
+        if (!room || !isRoomParticipant(room, socket.user._id)) return callback?.({ error: 'Room membership required.' });
+        const role = getRoomRole(room, socket.user._id);
+        callback?.({ success: true, interview: role === 'owner' ? sanitizeHostInterview(room.interview) : sanitizePublicInterview(room.interview) });
+      } catch (error) {
+        logger.error('Interview state request failed', { message: error.message });
+        callback?.({ error: 'Failed to load interview state.' });
       }
     });
 

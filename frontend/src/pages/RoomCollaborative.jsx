@@ -11,6 +11,7 @@ import ExecutionPanel from '../components/ExecutionPanel';
 import LanguageSelect from '../components/LanguageSelect';
 import RoomMembersPanel from '../components/RoomMembersPanel';
 import RevisionHistoryPanel from '../components/RevisionHistoryPanel';
+import InterviewPanel from '../components/InterviewPanel';
 import ConnectionBanner from '../components/ConnectionBanner';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCrdtCollaboration } from '../hooks/useCrdtCollaboration';
@@ -233,6 +234,7 @@ export default function RoomCollaborative() {
       </div>
 
       <aside className="room-sidebar" aria-label="Room Sidebar">
+        <InterviewPanel roomCode={roomCode} room={room} currentRole={currentRole} code={code} language={language} onRoomUpdated={setRoom} />
         <div className="sidebar-section presence-section" aria-live="polite">
           <h3>Online Users ({collaboration.onlineUsers.length})</h3>
           {collaboration.onlineUsers.length ? <ul className="users-list">{collaboration.onlineUsers.map((onlineUser) => <li key={onlineUser.socketId || onlineUser.userId} className="user-item"><span className="user-dot"></span>{onlineUser.name || 'Anonymous'}</li>)}</ul> : <p className="no-users">No other collaborators online.</p>}

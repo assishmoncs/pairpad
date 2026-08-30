@@ -16,6 +16,7 @@ const roomRoutes = require('./routes/roomRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const executeRoutes = require('./routes/executeRoutes');
 const initializeSocket = require('./sockets/socketHandler');
+const { initializeCrdtSocket } = require('./sockets/crdtSocketHandler');
 const { apiLimiter, authLimiter, executeLimiter } = require('./middleware/rateLimiter');
 const {
   requestLogger,
@@ -128,8 +129,9 @@ const io = new Server(server, {
 // Store io instance for access in routes
 app.set('io', io);
 
-// Attach Socket.IO handler
+// Attach Socket.IO handlers
 initializeSocket(io);
+initializeCrdtSocket(io);
 
 // Connect to MongoDB and start server
 async function startServer() {

@@ -33,7 +33,7 @@ const authenticate = async (req, res, user, status = 200) => {
   const { refreshToken } = await issueSession({ userId: user._id, req });
   const accessToken = generateAccessToken(user._id);
   setRefreshCookie(res, refreshToken);
-  return sendSuccess(res, status === 201 ? 'Registration successful.' : 'Login successful.', { user: user.toJSON(), token: accessToken }, status);
+  return sendSuccess(res, status === 201 ? 'Registration successful.' : 'Login successful.', { user: user.toJSON(), token: accessToken }, { status });
 };
 
 const register = async (req, res) => {

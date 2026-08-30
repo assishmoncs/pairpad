@@ -27,7 +27,8 @@ describe('AppRoutes auth bootstrap', () => {
     let meAttempts = 0;
 
     axios.post.mockImplementation((url) => {
-      if (url === '/api/auth/refresh') return Promise.resolve({ data: { data: { token: 'refreshed-token' } } });
+      if (url === '/api/auth/refresh')
+        return Promise.resolve({ data: { data: { token: 'refreshed-token' } } });
       return Promise.reject(new Error(`Unhandled POST ${url}`));
     });
 
@@ -85,7 +86,8 @@ describe('auth pages', () => {
         error.response = { status: 401 };
         return Promise.reject(error);
       }
-      if (url === '/api/auth/login') return Promise.resolve({ data: { data: { user, token: 'login-token' } } });
+      if (url === '/api/auth/login')
+        return Promise.resolve({ data: { data: { user, token: 'login-token' } } });
       return Promise.reject(new Error(`Unhandled POST ${url}`));
     });
     axios.get.mockImplementation((url) => {
@@ -101,10 +103,14 @@ describe('auth pages', () => {
     await userEvent.click(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledWith('/api/auth/login', {
-        email: user.email,
-        password: 'password123',
-      }, { withCredentials: true });
+      expect(axios.post).toHaveBeenCalledWith(
+        '/api/auth/login',
+        {
+          email: user.email,
+          password: 'password123',
+        },
+        { withCredentials: true }
+      );
     });
     expect(await screen.findByText(/welcome, ada/i)).toBeInTheDocument();
     // localStorage no longer used for tokens in this app
@@ -118,7 +124,8 @@ describe('auth pages', () => {
         error.response = { status: 401 };
         return Promise.reject(error);
       }
-      if (url === '/api/auth/register') return Promise.resolve({ data: { data: { user, token: 'register-token' } } });
+      if (url === '/api/auth/register')
+        return Promise.resolve({ data: { data: { user, token: 'register-token' } } });
       return Promise.reject(new Error(`Unhandled POST ${url}`));
     });
     axios.get.mockImplementation((url) => {
@@ -136,11 +143,15 @@ describe('auth pages', () => {
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
     await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledWith('/api/auth/register', {
-        name: user.name,
-        email: user.email,
-        password: 'password123',
-      }, { withCredentials: true });
+      expect(axios.post).toHaveBeenCalledWith(
+        '/api/auth/register',
+        {
+          name: user.name,
+          email: user.email,
+          password: 'password123',
+        },
+        { withCredentials: true }
+      );
     });
     expect(await screen.findByText(/welcome, ada/i)).toBeInTheDocument();
   });
@@ -163,6 +174,10 @@ describe('auth pages', () => {
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
     expect(await screen.findByText(/passwords do not match/i)).toBeInTheDocument();
-    expect(axios.post).not.toHaveBeenCalledWith('/api/auth/register', expect.anything(), expect.anything());
+    expect(axios.post).not.toHaveBeenCalledWith(
+      '/api/auth/register',
+      expect.anything(),
+      expect.anything()
+    );
   });
 });

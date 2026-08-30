@@ -48,7 +48,8 @@ describe('AuthContext', () => {
         error.response = { status: 401 };
         return Promise.reject(error);
       }
-      if (url === '/api/auth/login') return Promise.resolve({ data: { data: { user: { name: 'Ada' }, token: 'tok-1' } } });
+      if (url === '/api/auth/login')
+        return Promise.resolve({ data: { data: { user: { name: 'Ada' }, token: 'tok-1' } } });
       return Promise.reject(new Error(`Unhandled POST ${url}`));
     });
 
@@ -68,12 +69,14 @@ describe('AuthContext', () => {
 
   it('logs the user out and clears the token', async () => {
     axios.post.mockImplementation((url) => {
-      if (url === '/api/auth/refresh') return Promise.resolve({ data: { data: { token: 'tok-x' } } });
+      if (url === '/api/auth/refresh')
+        return Promise.resolve({ data: { data: { token: 'tok-x' } } });
       if (url === '/api/auth/logout') return Promise.resolve({});
       return Promise.reject(new Error(`Unhandled POST ${url}`));
     });
     axios.get.mockImplementation((url) => {
-      if (url === '/api/auth/me') return Promise.resolve({ data: { data: { user: { name: 'Ada' } } } });
+      if (url === '/api/auth/me')
+        return Promise.resolve({ data: { data: { user: { name: 'Ada' } } } });
       return Promise.reject(new Error(`Unhandled GET ${url}`));
     });
 

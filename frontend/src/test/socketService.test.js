@@ -15,7 +15,16 @@ vi.mock('socket.io-client', () => ({
       timeout: vi.fn(() => ({
         emit: vi.fn((event, payload, callback) => {
           if (event === 'join-room')
-            callback?.(null, { room: { roomCode: typeof payload.roomCode === 'string' ? payload.roomCode.toUpperCase() : payload.roomCode }, users: [], role: 'editor' });
+            callback?.(null, {
+              room: {
+                roomCode:
+                  typeof payload.roomCode === 'string'
+                    ? payload.roomCode.toUpperCase()
+                    : payload.roomCode,
+              },
+              users: [],
+              role: 'editor',
+            });
         }),
       })),
       disconnect: vi.fn(),

@@ -14,6 +14,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{js,jsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,css}\"",
+    "perf": "npm run build && node scripts/check-build-budget.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

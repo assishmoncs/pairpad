@@ -1,5 +1,5 @@
 const interviewController = require('../src/controllers/interviewController');
-const { getInterview, configureInterview, startInterview, pauseInterview, resumeInterview, endInterview, submit } = interviewController;
+const { getInterview, configureInterview, startInterview, submit } = interviewController;
 const interviewService = require('../src/services/interviewService');
 const roomAccess = require('../src/utils/roomAccess');
 const apiResponse = require('../src/utils/apiResponse');

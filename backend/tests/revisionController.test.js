@@ -4,7 +4,7 @@ const roomAccess = require('../src/utils/roomAccess');
 const roomPermissions = require('../src/utils/roomPermissions');
 const apiResponse = require('../src/utils/apiResponse');
 const crdtSocketHandler = require('../src/sockets/crdtSocketHandler');
-const Revision = require('../src/models/Revision');
+
 
 jest.mock('../src/services/revisionService');
 jest.mock('../src/utils/roomAccess');

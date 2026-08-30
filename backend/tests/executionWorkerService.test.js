@@ -1,6 +1,5 @@
 jest.mock('axios', () => ({ post: jest.fn() }));
 
-const axios = require('axios');
 
 describe('execution worker client contract', () => {
   beforeEach(() => {

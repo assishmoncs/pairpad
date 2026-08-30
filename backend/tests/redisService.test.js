@@ -5,9 +5,9 @@ describe('redisService', () => {
   });
   it('connects', async () => {
     process.env.REDIS_URL = 'redis://localhost:6379';
-    try { await redisService.connectRedis(); } catch(e) {}
-    try { redisService.isRedisReady(); } catch(e) {}
-    try { redisService.getRedisClient(); } catch(e) {}
-    try { await redisService.closeRedis(); } catch(e) {}
+    try { await redisService.connectRedis(); } catch { /* ignore */ }
+    try { redisService.isRedisReady(); } catch { /* ignore */ }
+    try { redisService.getRedisClient(); } catch { /* ignore */ }
+    try { await redisService.closeRedis(); } catch { /* ignore */ }
   });
 });

@@ -42,9 +42,9 @@ describe('socketHandlerDistributed', () => {
     socketHandlerDistributed(io);
     
     // Call every handler with a dummy payload
-    for (const [event, handler] of Object.entries(handlers)) {
-       try { await handler({ roomCode: 'ROOM1', fileId: 'F1', content: 'x', type: 'x', position: {} }); } catch(e) {}
-       try { await handler(); } catch(e) {}
+    for (const handler of Object.values(handlers)) {
+       try { await handler({ roomCode: 'ROOM1', fileId: 'F1', content: 'x', type: 'x', position: {} }); } catch { /* ignore */ }
+       try { await handler(); } catch { /* ignore */ }
     }
   });
 });

@@ -15,8 +15,8 @@ describe('authSessionController', () => {
     jest.clearAllMocks();
     req = { body: {}, headers: {}, user: { _id: 'user123', toJSON: () => ({ id: 'user123' }) } };
     res = { cookie: jest.fn(), clearCookie: jest.fn() };
-    apiResponse.sendSuccess.mockImplementation((r, m, d, s) => ({ success: true }));
-    apiResponse.sendError.mockImplementation((r, s, m) => ({ error: true }));
+    apiResponse.sendSuccess.mockImplementation((_r, _m, _d, _s) => ({ success: true }));
+    apiResponse.sendError.mockImplementation((_r, _s, _m) => ({ error: true }));
     apiResponse.sendValidationError.mockImplementation(() => ({ error: true }));
     sessionTokens.generateAccessToken.mockReturnValue('access123');
     refreshSessionService.issueSession.mockResolvedValue({ refreshToken: 'refresh123' });

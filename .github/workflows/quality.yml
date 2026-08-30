@@ -70,6 +70,72 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  performance:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })' || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci_perf_secret_replace_for_real_deployments
+      MONGODB_URI: mongodb://127.0.0.1:27017/pairpad_perf
+      REDIS_URL: redis://127.0.0.1:6379
+      REDIS_REQUIRED: 'true'
+      CLIENT_URL: http://127.0.0.1:5173
+      PERF_REQUESTS: 120
+      PERF_CONCURRENCY: 12
+      PERF_P95_MS: 250
+      PERF_ERROR_RATE: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
+      - name: Start backend
+        working-directory: backend
+        run: |
+          nohup npm start > /tmp/pairpad-performance-backend.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:5000/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:5000/ready
+      - name: Run API performance budget
+        working-directory: backend
+        run: npm run perf
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+      - name: Run frontend build budget
+        working-directory: frontend
+        run: npm run perf
+      - name: Upload performance logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pairpad-performance-logs
+          path: /tmp/pairpad-performance-backend.log
+
   e2e:
     runs-on: ubuntu-latest
     needs: [backend, frontend]

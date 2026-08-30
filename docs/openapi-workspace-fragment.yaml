@@ -1,0 +1,61 @@
+# Workspace paths to merge into docs/openapi.yaml
+paths:
+  /api/rooms/{roomCode}/files:
+    get:
+      tags: [Workspace]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses: { '200': { description: Workspace file list } }
+    post:
+      tags: [Workspace]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, maxLength: 240 }
+                language: { type: string }
+                content: { type: string, maxLength: 524288 }
+      responses:
+        '201': { description: Workspace file created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/files/{fileId}:
+    get:
+      tags: [Workspace]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Workspace file }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Workspace]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, maxLength: 240 }
+      responses:
+        '200': { description: Workspace file renamed }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Workspace]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Workspace file deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }

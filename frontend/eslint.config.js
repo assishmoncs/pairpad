@@ -33,16 +33,14 @@ export default [
     rules: {
       ...react.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
-      'react/react-in-jsx-scope': 'off', // Not needed with the modern JSX transform.
-      // PropTypes aren't used (a future TypeScript migration will supersede them).
+      'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
-      'react/no-unescaped-entities': 'off', // Apostrophes in UI copy are safe here.
+      'react/no-unescaped-entities': 'off',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'off',
     },
   },
   {
-    // Vitest test files use globals (globals: true in vite.config.js).
     files: ['**/*.{test,spec}.{js,jsx}'],
     languageOptions: {
       globals: {
@@ -59,5 +57,17 @@ export default [
       },
     },
   },
-  prettier, // Turn off formatting rules that conflict with Prettier.
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  prettier,
 ];

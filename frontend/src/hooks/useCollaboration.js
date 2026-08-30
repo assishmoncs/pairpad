@@ -1,90 +1,91 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import socketService from '../services/socketService';
-import { cursorColorForUser, cursorColorKeyForUser } from '../utils/cursor';
 
 export const useCollaboration = ({
-  room, token, roomCode, isMountedRef, onRemoteCode, onRoomDeleted,
-  onChatIncoming, onExecutionResult, onRoleUpdated, fetchMessages,
+  room,
+  token,
+  roomCode,
+  isMountedRef,
+  onRemoteCode,
+  onRoomDeleted,
+  onChatIncoming,
+  onExecutionResult,
+  onRoleUpdated,
+  fetchMessages,
 }) => {
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const [remoteCursors, setRemoteCursors] = useState({});
   const [socketError, setSocketError] = useState('');
-  const socketCleanupRef = useRef(null);
-  const isRemoteChangeRef = useRef(false);
-  const lastRemoteCodeRef = useRef(null);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [remoteCursors, setRemoteCursors] = useState(new Map());
+  const socketCleanupRef = useRef(() => {});
+  const cursorExpiryTimersRef = useRef(new Map());
 
-  const clearRemoteCursors = useCallback(() => setRemoteCursors({}), []);
+  const clearRemoteCursors = useCallback(() => {
+    cursorExpiryTimersRef.current.forEach((timer) => clearTimeout(timer));
+    cursorExpiryTimersRef.current.clear();
+    setRemoteCursors(new Map());
+  }, []);
+
   const cleanupListeners = useCallback(() => {
-    socketCleanupRef.current?.();
-    socketCleanupRef.current = null;
-    clearRemoteCursors();
-  }, [clearRemoteCursors]);
+    socketCleanupRef.current();
+    socketCleanupRef.current = () => {};
+  }, []);
 
   const connectToSocket = useCallback(async () => {
     cleanupListeners();
+    if (!token || !roomCode) return;
+    setReconnecting(true);
     setSocketError('');
-    setReconnecting(false);
 
-    const unsubConnect = socketService.on('connect', async () => {
-      if (!isMountedRef.current) return;
-      setConnected(true); setReconnecting(false); setSocketError(''); clearRemoteCursors();
-      const currentRoom = socketService.getCurrentRoom();
-      if (currentRoom) {
-        try {
-          const response = await socketService.joinRoom(currentRoom);
-          if (isMountedRef.current && response.users) setOnlineUsers(response.users);
-          if (response.role) onRoleUpdated?.(response.role);
-        } catch (err) {
-          if (isMountedRef.current) setSocketError('Reconnected, but could not rejoin room: ' + err.message);
-        }
+    const unsubConnect = socketService.on('connect', () => {
+      if (isMountedRef.current) {
+        setConnected(true);
+        setReconnecting(false);
       }
     });
-
-    const unsubDisconnect = socketService.on('disconnect', ({ reason } = {}) => {
-      if (!isMountedRef.current) return;
-      setConnected(false); clearRemoteCursors();
-      setReconnecting(reason !== 'io client disconnect' && reason !== 'io server disconnect');
+    const unsubDisconnect = socketService.on('disconnect', () => {
+      if (isMountedRef.current) {
+        setConnected(false);
+        setReconnecting(true);
+        clearRemoteCursors();
+      }
     });
     const unsubPresence = socketService.on('presence-update', ({ users } = {}) => {
-      if (!isMountedRef.current) return;
-      const nextUsers = users || [];
-      setOnlineUsers(nextUsers);
-      const activeIds = new Set(nextUsers.map((entry) => String(entry.userId)));
-      setRemoteCursors((current) => Object.fromEntries(Object.entries(current).filter(([id]) => activeIds.has(String(id)))));
+      if (isMountedRef.current) setOnlineUsers(users || []);
     });
     const unsubUserLeft = socketService.on('user-left', ({ userId } = {}) => {
       if (!userId) return;
       setRemoteCursors((current) => {
-        if (!current[userId]) return current;
-        const next = { ...current }; delete next[userId]; return next;
+        const next = new Map(current);
+        next.delete(String(userId));
+        return next;
       });
     });
-    const unsubCursor = socketService.on('cursor-update', (payload = {}) => {
-      if (!isMountedRef.current || !payload.userId) return;
-      const userId = String(payload.userId);
-      setRemoteCursors((current) => ({ ...current, [userId]: {
-        userId, name: payload.userName || 'Collaborator', position: payload.position,
-        selection: payload.selection || null, color: cursorColorForUser(userId), colorKey: cursorColorKeyForUser(userId),
-      }}));
+    const unsubCursor = socketService.on('cursor-update', (cursor = {}) => {
+      if (!cursor.userId) return;
+      const userId = String(cursor.userId);
+      setRemoteCursors((current) => new Map(current).set(userId, cursor));
+      const previousTimer = cursorExpiryTimersRef.current.get(userId);
+      if (previousTimer) clearTimeout(previousTimer);
+      cursorExpiryTimersRef.current.set(userId, window.setTimeout(() => {
+        setRemoteCursors((current) => {
+          const next = new Map(current);
+          next.delete(userId);
+          return next;
+        });
+        cursorExpiryTimersRef.current.delete(userId);
+      }, 15000));
     });
-    const unsubRole = socketService.on('member-role-updated', ({ userId, role } = {}) => {
-      if (!userId || !role) return;
-      onRoleUpdated?.(role, String(userId));
-    });
-    const unsubCode = socketService.on('code-change', ({ content, language }) => {
-      if (!isMountedRef.current) return;
-      isRemoteChangeRef.current = true; lastRemoteCodeRef.current = content;
-      onRemoteCode({ content, language });
-      setTimeout(() => { isRemoteChangeRef.current = false; }, 50);
-    });
-    const unsubChat = socketService.on('chat-message', onChatIncoming);
-    const unsubExecution = socketService.on('code-execution-result', onExecutionResult);
-    const unsubDeleted = socketService.on('room-deleted', () => { if (isMountedRef.current) onRoomDeleted(); });
+    const unsubRole = socketService.on('member-role-updated', ({ role, userId } = {}) => onRoleUpdated?.(role, userId));
+    const unsubCode = socketService.on('code-change', (data) => onRemoteCode?.(data));
+    const unsubChat = socketService.on('chat-message', (data) => onChatIncoming?.(data));
+    const unsubExecution = socketService.on('code-execution-result', (data) => onExecutionResult?.(data));
+    const unsubDeleted = socketService.on('room-deleted', () => onRoomDeleted?.());
 
     socketCleanupRef.current = () => {
       [unsubConnect, unsubDisconnect, unsubPresence, unsubUserLeft, unsubCursor, unsubRole, unsubCode, unsubChat, unsubExecution, unsubDeleted].forEach((fn) => fn());
+      clearRemoteCursors();
     };
 
     try {
@@ -96,16 +97,26 @@ export const useCollaboration = ({
       if (isMountedRef.current && response.users) setOnlineUsers(response.users);
       if (response.role) onRoleUpdated?.(response.role);
       await fetchMessages();
-    } catch (err) {
-      if (isMountedRef.current) { setSocketError('Could not connect to collaboration server. Retrying…'); setReconnecting(true); }
+    } catch {
+      if (isMountedRef.current) {
+        setSocketError('Could not connect to collaboration server. Retrying…');
+        setReconnecting(true);
+      }
     }
   }, [cleanupListeners, clearRemoteCursors, token, roomCode, isMountedRef, onRemoteCode, onRoomDeleted, onChatIncoming, onExecutionResult, onRoleUpdated, fetchMessages]);
 
   useEffect(() => {
-    if (!room || !token) return;
-    connectToSocket();
-    return () => { cleanupListeners(); socketService.leaveRoom(); };
+    if (room && token) void connectToSocket();
+    return cleanupListeners;
   }, [room, token, connectToSocket, cleanupListeners]);
 
-  return { connected, reconnecting, onlineUsers, remoteCursors, socketError, setSocketError, isRemoteChangeRef, lastRemoteCodeRef, connectToSocket, cleanupListeners };
+  return {
+    connected,
+    reconnecting,
+    socketError,
+    onlineUsers,
+    remoteCursors,
+    connectToSocket,
+    cleanupListeners,
+  };
 };

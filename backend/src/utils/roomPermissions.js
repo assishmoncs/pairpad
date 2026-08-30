@@ -1,53 +1,42 @@
-/**
- * Central room authorization policy.
- * Roles are persisted per room member and every layer should use these helpers
- * instead of duplicating role comparisons.
- */
+/** Central room authorization policy. */
 
-const ROLES = Object.freeze({
-  OWNER: 'owner',
-  EDITOR: 'editor',
-  VIEWER: 'viewer',
-});
-
-const ROLE_ORDER = Object.freeze({
-  [ROLES.VIEWER]: 1,
-  [ROLES.EDITOR]: 2,
-  [ROLES.OWNER]: 3,
-});
+const ROLES = Object.freeze({ OWNER: 'owner', EDITOR: 'editor', VIEWER: 'viewer' });
+const ROLE_ORDER = Object.freeze({ viewer: 1, editor: 2, owner: 3 });
 
 const normalizeRole = (role) => {
   const normalized = typeof role === 'string' ? role.toLowerCase() : '';
-  return Object.prototype.hasOwnProperty.call(ROLE_ORDER, normalized)
-    ? normalized
-    : ROLES.VIEWER;
+  return Object.prototype.hasOwnProperty.call(ROLE_ORDER, normalized) ? normalized : null;
 };
 
 const getMemberRole = (room, userId) => {
   if (!room || !userId) return null;
-
   const requestedId = userId.toString();
   if (room.owner?.toString() === requestedId) return ROLES.OWNER;
 
-  const member = (room.members || []).find((entry) => {
-    const memberId = entry?.user?._id || entry?._id || entry?.userId;
+  const roleEntry = (room.memberRoles || []).find((entry) => {
+    const memberId = entry?.user?._id || entry?.user || entry?.userId;
     return memberId?.toString() === requestedId;
   });
+  if (roleEntry) return normalizeRole(roleEntry.role) || ROLES.EDITOR;
 
-  return member ? normalizeRole(member.role) : null;
+  const isLegacyMember = (room.members || []).some((member) => {
+    const memberId = member?._id || member;
+    return memberId?.toString() === requestedId;
+  });
+  return isLegacyMember ? ROLES.EDITOR : null;
 };
 
 const hasMinimumRole = (role, minimumRole) => {
-  const current = normalizeRole(role);
-  const minimum = normalizeRole(minimumRole);
+  const current = normalizeRole(role) || ROLES.VIEWER;
+  const minimum = normalizeRole(minimumRole) || ROLES.VIEWER;
   return ROLE_ORDER[current] >= ROLE_ORDER[minimum];
 };
 
 const canEdit = (role) => hasMinimumRole(role, ROLES.EDITOR);
-const canView = (role) => hasMinimumRole(role, ROLES.VIEWER);
-const canManageMembers = (role) => normalizeRole(role) === ROLES.OWNER;
-const canDeleteRoom = (role) => normalizeRole(role) === ROLES.OWNER;
-const canTransferOwnership = (role) => normalizeRole(role) === ROLES.OWNER;
+const canView = (role) => role !== null;
+const canManageMembers = (role) => (normalizeRole(role) || '') === ROLES.OWNER;
+const canDeleteRoom = canManageMembers;
+const canTransferOwnership = canManageMembers;
 
 module.exports = {
   ROLES,

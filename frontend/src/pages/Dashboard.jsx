@@ -39,11 +39,7 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchRooms();
-  }, []);
-
-  const fetchRooms = async () => {
+  const fetchRooms = React.useCallback(async () => {
     try {
       const response = await axios.get('/api/rooms');
       setRooms(response.data.data.rooms);
@@ -52,7 +48,11 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
 
   const handleCreateRoom = async (e) => {
     e.preventDefault();

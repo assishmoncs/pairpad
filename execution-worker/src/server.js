@@ -25,9 +25,9 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 
 const constantTimeEqual = (left, right) => {
-  const a = Buffer.from(String(left));
-  const b = Buffer.from(String(right));
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const a = crypto.createHmac('sha256', 'cte').update(String(left)).digest();
+  const b = crypto.createHmac('sha256', 'cte').update(String(right)).digest();
+  return crypto.timingSafeEqual(a, b);
 };
 
 const authenticate = (req, res, next) => {
@@ -58,7 +58,7 @@ const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
   fs.writeFileSync(sourcePath, sourceCode, { encoding: 'utf8', mode: 0o400 });
 
   const args = [
-    'run', '--rm',
+    'run', '--rm', '--name', jobId,
     '--network', DOCKER_NETWORK,
     '--memory', MAX_MEMORY,
     '--cpus', MAX_CPUS,
@@ -97,6 +97,7 @@ const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
   });
 
   const timeout = setTimeout(() => {
+    try { spawn('docker', ['kill', jobId]); } catch {}
     try { child.kill('SIGKILL'); } catch {}
   }, EXECUTION_TIMEOUT_MS);
 
@@ -114,7 +115,7 @@ const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
       stderr: error.message,
       output: stdout.value,
       status: 'worker_error',
-      statusCode: 500,
+      statusCode: 500, // HTTP style
       time: `${((Date.now() - start) / 1000).toFixed(3)}s`,
       exitCode: 1,
       signal: null,
@@ -130,8 +131,9 @@ const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
       stderr: [stderr.value, outputError].filter(Boolean).join('\n'),
       output: stdout.value,
       status: timedOut ? 'time_limit_exceeded' : code === 0 ? 'success' : 'runtime_error',
+      // statusCode is Judge0 compatible
       statusCode: timedOut ? 5 : code === 0 ? 3 : 8,
-      time: `${Math.min(Date.now() - start, EXECUTION_TIMEOUT_MS) / 1000}s`,
+      time: `${(Math.min(Date.now() - start, EXECUTION_TIMEOUT_MS) / 1000).toFixed(3)}s`,
       exitCode: code,
       signal: signal || (timedOut ? 'SIGKILL' : null),
     });
@@ -142,6 +144,7 @@ const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
 });
 
 app.post('/execute', authenticate, async (req, res) => {
+  const start = Date.now();
   try {
     const { sourceCode, language, stdin = '' } = req.body || {};
     if (language !== 'javascript') {
@@ -152,12 +155,19 @@ app.post('/execute', authenticate, async (req, res) => {
     if (typeof stdin !== 'string' || Buffer.byteLength(stdin, 'utf8') > MAX_OUTPUT_BYTES) return res.status(400).json({ error: 'stdin is invalid or too large.' });
 
     const result = await runDocker({ sourceCode, stdin });
+    console.log(`[Execute] ${language} - ${Buffer.byteLength(sourceCode, 'utf8')} bytes - ${result.status} - ${result.time}`);
     return res.json({ result });
   } catch (error) {
+    console.error(`[Execute] Error: ${error.message}`);
     return res.status(500).json({ error: 'Execution worker failed.' });
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`PairPad execution worker listening on ${PORT}`);
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Shutting down gracefully.');
+  server.close(() => process.exit(0));
 });

@@ -27,6 +27,7 @@ services:
   execution-worker:
     build:
       context: ./execution-worker
+    user: root
     restart: unless-stopped
     environment:
       NODE_ENV: production

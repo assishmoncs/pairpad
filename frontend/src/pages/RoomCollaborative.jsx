@@ -82,9 +82,9 @@ export default function RoomCollaborative() {
     enabled: Boolean(activeFile),
     fallbackText: activeFile?.snapshotCode || '',
     onChange: setCode,
-    onDocumentRestored: ({ language: restoredLanguage }) => {
+    onDocumentRestored: useCallback(({ language: restoredLanguage }) => {
       if (restoredLanguage) setLanguage(restoredLanguage);
-    },
+    }, []),
   });
 
   useRemoteCursors(editor, collaboration.remoteCursors);
@@ -210,9 +210,10 @@ export default function RoomCollaborative() {
     }
   };
 
+  const connectToSocket = collaboration.connectToSocket;
   const retryConnection = useCallback(() => {
-    if (token) collaboration.connectToSocket();
-  }, [token, collaboration.connectToSocket]);
+    if (token) connectToSocket();
+  }, [token, connectToSocket]);
 
   useRoomShortcuts({
     onRun: () => {

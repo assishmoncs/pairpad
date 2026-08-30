@@ -15,6 +15,7 @@ const FORWARDED_EVENTS = [
   'workspace-file-created',
   'workspace-file-renamed',
   'workspace-file-deleted',
+  'member-role-updated',
 ];
 
 const ACK_TIMEOUT_MS = 5000;

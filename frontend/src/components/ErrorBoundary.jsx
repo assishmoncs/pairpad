@@ -19,7 +19,7 @@ class ErrorBoundary extends React.Component {
   };
 
   handleDashboard = () => {
-    window.location.href = '/';
+    window.location.href = '/dashboard';
   };
 
   render() {

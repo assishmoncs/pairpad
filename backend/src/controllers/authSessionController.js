@@ -1,13 +1,13 @@
 const User = require('../models/User');
 const {
-  createSession,
-  rotateRefreshSession,
-  revokeSessionByToken,
-  revokeAllSessions,
+  issueSession,
+  rotate,
+  revokeToken,
+  revokeAllForUser,
 } = require('../services/refreshSessionService');
-const { verifyRefreshToken } = require('../utils/sessionTokens');
+const { verifyRefreshToken, generateAccessToken } = require('../utils/sessionTokens');
 const { sendValidationError, sendError, sendSuccess } = require('../utils/apiResponse');
-const { validateEmail, validatePassword } = require('../utils/validation');
+const { isValidEmail, validatePassword } = require('../utils/validation');
 
 const COOKIE_NAME = process.env.REFRESH_COOKIE_NAME || 'pairpad_refresh';
 const COOKIE_MAX_AGE_MS = Number(process.env.REFRESH_TOKEN_TTL_MS || 7 * 24 * 60 * 60 * 1000);
@@ -30,7 +30,8 @@ const clearRefreshCookie = (res) => res.clearCookie(COOKIE_NAME, cookieOptions()
 const getRefreshCookieName = () => COOKIE_NAME;
 
 const authenticate = async (req, res, user, status = 200) => {
-  const { accessToken, refreshToken } = await createSession(user._id, req);
+  const { refreshToken } = await issueSession({ userId: user._id, req });
+  const accessToken = generateAccessToken(user._id);
   setRefreshCookie(res, refreshToken);
   return sendSuccess(res, status === 201 ? 'Registration successful.' : 'Login successful.', { user: user.toJSON(), token: accessToken }, status);
 };
@@ -39,8 +40,9 @@ const register = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim().length < 1 || name.trim().length > 50) return sendError(res, 400, 'Name must be between 1 and 50 characters.');
-    if (!validateEmail(email)) return sendError(res, 400, 'Please provide a valid email address.');
-    if (!validatePassword(password)) return sendError(res, 400, 'Password must be at least 6 characters.');
+    if (!isValidEmail(email)) return sendError(res, 400, 'Please provide a valid email address.');
+    const pwCheck = validatePassword(password);
+    if (!pwCheck.valid) return sendError(res, 400, pwCheck.error);
     const normalizedEmail = email.trim().toLowerCase();
     const exists = await User.findOne({ email: normalizedEmail });
     if (exists) return sendError(res, 409, 'An account with this email already exists.');
@@ -68,10 +70,11 @@ const refreshAccessToken = async (req, res) => {
   try {
     const refreshToken = parseCookies(req.headers.cookie)[getRefreshCookieName()];
     if (!refreshToken) return sendError(res, 401, 'Refresh session is missing.');
-    const payload = verifyRefreshToken(refreshToken);
-    const rotated = await rotateRefreshSession(payload, refreshToken, req);
+    verifyRefreshToken(refreshToken);
+    const rotated = await rotate({ refreshToken, req });
+    const accessToken = generateAccessToken(rotated.userId);
     setRefreshCookie(res, rotated.refreshToken);
-    return sendSuccess(res, 'Session refreshed.', { token: rotated.accessToken });
+    return sendSuccess(res, 'Session refreshed.', { token: accessToken });
   } catch (error) {
     clearRefreshCookie(res);
     return sendError(res, 401, error.code === 'REFRESH_REUSE' ? 'Refresh session was revoked. Please sign in again.' : 'Invalid or expired refresh session.');
@@ -81,7 +84,7 @@ const refreshAccessToken = async (req, res) => {
 const logout = async (req, res) => {
   try {
     const refreshToken = parseCookies(req.headers.cookie)[getRefreshCookieName()];
-    if (refreshToken) await revokeSessionByToken(refreshToken);
+    if (refreshToken) await revokeToken(refreshToken);
   } finally {
     clearRefreshCookie(res);
   }
@@ -89,12 +92,12 @@ const logout = async (req, res) => {
 };
 
 const logoutAll = async (req, res) => {
-  await revokeAllSessions(req.user._id);
+  await revokeAllForUser(req.user._id);
   clearRefreshCookie(res);
   return sendSuccess(res, 'All sessions have been logged out.');
 };
 
-const me = async (req, res) => sendSuccess(res, 'User retrieved successfully.', { user: req.user.toJSON() });
+const getMe = async (req, res) => sendSuccess(res, 'User retrieved successfully.', { user: req.user.toJSON() });
 
 module.exports = {
   register,
@@ -102,6 +105,7 @@ module.exports = {
   refreshAccessToken,
   logout,
   logoutAll,
-  me,
+  getMe,
   getRefreshCookieName,
 };
+

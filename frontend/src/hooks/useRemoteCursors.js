@@ -7,7 +7,7 @@ export const useRemoteCursors = (editor, remoteCursors) => {
     if (!editor) return undefined;
     const model = editor.getModel();
     if (!model) return undefined;
-    const decorations = Object.values(remoteCursors)
+    const decorations = [...remoteCursors.values()]
       .map((cursor) => buildCursorDecoration({ cursor, editorLineCount: model.getLineCount() }))
       .filter(Boolean);
     const collection = editor.createDecorationsCollection(decorations);

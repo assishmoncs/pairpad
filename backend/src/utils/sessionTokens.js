@@ -14,4 +14,10 @@ const generateRefreshToken = (userId, familyId = crypto.randomUUID()) =>
     { expiresIn: REFRESH_EXPIRES_IN }
   );
 
-module.exports = { generateAccessToken, generateRefreshToken, ACCESS_EXPIRES_IN, REFRESH_EXPIRES_IN };
+const verifyRefreshToken = (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (decoded.type !== 'refresh') throw new Error('Invalid token type.');
+  return decoded;
+};
+
+module.exports = { generateAccessToken, generateRefreshToken, verifyRefreshToken, ACCESS_EXPIRES_IN, REFRESH_EXPIRES_IN };

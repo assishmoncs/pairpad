@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import socketService from '../services/socketService';
+import { LANGUAGES } from '../constants/languages';
 import './InterviewPanel.css';
 
 const emptyTest = () => ({ name: '', stdin: '', expectedOutput: '' });
@@ -125,7 +126,7 @@ const InterviewPanel = ({ roomCode, room, currentRole, code, language, onRoomUpd
       {showConfig && <form className="interview-form" onSubmit={saveConfig}>
         <label>Title<input value={form.title} maxLength={120} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
         <label>Problem statement<textarea rows={4} value={form.description} maxLength={5000} onChange={(event) => setForm({ ...form, description: event.target.value })} required /></label>
-        <div className="interview-form-grid"><label>Duration (min)<input type="number" min="1" max="1440" value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} required /></label><label>Language<select value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value })}><option value="javascript">JavaScript</option><option value="python">Python</option><option value="typescript">TypeScript</option><option value="java">Java</option><option value="cpp">C++</option><option value="c">C</option><option value="go">Go</option><option value="rust">Rust</option><option value="php">PHP</option><option value="ruby">Ruby</option></select></label></div>
+        <div className="interview-form-grid"><label>Duration (min)<input type="number" min="1" max="1440" value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} required /></label><label>Language<select value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value })}>{LANGUAGES.map(({ value: val, label }) => <option key={val} value={val}>{label}</option>)}</select></label></div>
         <label>Candidate<select value={form.candidateId} onChange={(event) => setForm({ ...form, candidateId: event.target.value })}><option value="">Any editor</option>{(room?.members || []).filter((member) => String(member._id) !== String(room?.owner?._id || room?.owner)).map((member) => <option key={member._id} value={member._id}>{member.name} ({member.email})</option>)}</select></label>
         <TestEditor title="Public tests" tests={form.publicTests} kind="publicTests" updateTest={updateTest} addTest={addTest} removeTest={removeTest} />
         <TestEditor title="Hidden tests" tests={form.hiddenTests} kind="hiddenTests" updateTest={updateTest} addTest={addTest} removeTest={removeTest} />
@@ -136,9 +137,9 @@ const InterviewPanel = ({ roomCode, room, currentRole, code, language, onRoomUpd
     {interview && <>
       <div className={`interview-timer ${remaining <= 60 && interview.status === 'running' ? 'timer-warning' : ''}`} aria-live="polite"><span>{formatTime(remaining)}</span><small>{interview.status === 'running' ? 'Time remaining' : interview.status === 'paused' ? 'Paused' : interview.status === 'ended' ? 'Interview ended' : 'Ready to start'}</small></div>
       <div className="interview-problem"><h4>{interview.title}</h4><p>{interview.description}</p></div>
-      {interview.publicTests?.length > 0 && <div className="interview-tests"><h4>Public examples</h4>{interview.publicTests.map((test) => <div className="interview-test" key={test.id}><strong>{test.name}</strong><code>Input: {test.stdin || '(empty)'}</code><code>Expected: {test.expectedOutput || '(empty)'}</code></div>)}</div>}
+      {interview.publicTests?.length > 0 && <div className="interview-tests"><h4>Public examples</h4>{interview.publicTests.map((test, index) => <div className="interview-test" key={test.id || index}><strong>{test.name}</strong><code>Input: {test.stdin || '(empty)'}</code><code>Expected: {test.expectedOutput || '(empty)'}</code></div>)}</div>}
       {canSubmit && interview.status === 'running' && <button type="button" className="btn-interview-primary interview-submit" onClick={submit} disabled={saving || remaining <= 0}>{saving ? 'Evaluating…' : 'Submit solution'}</button>}
-      {submission && <div className="interview-results"><strong>Score: {submission.score}/{submission.total}</strong><div>{submission.publicResults?.map((result) => <div key={result.id} className={result.passed ? 'test-passed' : 'test-failed'}>{result.passed ? '✓' : '✕'} {result.name}</div>)}{submission.hiddenResults?.map((result) => <div key={result.id} className={result.passed ? 'test-passed' : 'test-failed'}>{result.passed ? '✓' : '✕'} {result.name} <span>(hidden)</span></div>)}</div></div>}
+      {submission && <div className="interview-results"><strong>Score: {submission.score}/{submission.total}</strong><div>{submission.publicResults?.map((result, index) => <div key={result.id || index} className={result.passed ? 'test-passed' : 'test-failed'}>{result.passed ? '✓' : '✕'} {result.name}</div>)}{submission.hiddenResults?.map((result, index) => <div key={result.id || index} className={result.passed ? 'test-passed' : 'test-failed'}>{result.passed ? '✓' : '✕'} {result.name} <span>(hidden)</span></div>)}</div></div>}
     </>}
   </section>;
 };

@@ -15,7 +15,7 @@ export default function WorkspaceFilesPanel({ roomCode, currentRole, activeFileI
   const [error, setError] = useState('');
   const canEdit = ['owner', 'editor'].includes(currentRole);
 
-  const loadFiles = async () => {
+  const loadFiles = React.useCallback(async () => {
     setError('');
     try {
       const response = await axios.get(`/api/rooms/${roomCode}/files`);
@@ -24,10 +24,9 @@ export default function WorkspaceFilesPanel({ roomCode, currentRole, activeFileI
       if (!activeFileId && nextFiles[0]) onSelectFile(nextFiles[0]);
     } catch (err) { setError(err.response?.data?.message || 'Failed to load workspace files.'); }
     finally { setLoading(false); }
-  };
+  }, [roomCode, activeFileId, onSelectFile]);
 
-  useEffect(() => { loadFiles(); // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode]);
+  useEffect(() => { loadFiles(); }, [loadFiles]);
 
   useEffect(() => {
     const created = (payload = {}) => { if (!payload.file) return; setFiles((current) => [...current.filter((file) => String(file._id) !== String(payload.file._id)), payload.file].sort((a, b) => a.path.localeCompare(b.path))); };

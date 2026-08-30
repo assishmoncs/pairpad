@@ -12,6 +12,7 @@ export const useCrdtCollaboration = ({
   enabled = true,
   onChange,
   fallbackText = '',
+  onDocumentRestored,
 }) => {
   const clientIdRef = useRef(makeClientId());
   const crdtRef = useRef(new TextCrdt(clientIdRef.current));
@@ -62,16 +63,30 @@ export const useCrdtCollaboration = ({
         applyingRemoteRef.current = false;
       };
 
+      const handleRestore = ({ state, content, language, revisionId } = {}) => {
+        if (!state) {
+          setCrdtError('The restored document did not contain a valid collaborative state.');
+          return;
+        }
+        crdtRef.current.resetFromState(state);
+        initializedRef.current = true;
+        applyingRemoteRef.current = true;
+        emitText(typeof content === 'string' ? content : crdtRef.current.getText());
+        applyingRemoteRef.current = false;
+        setCrdtReady(true);
+        setCrdtError('');
+        onDocumentRestored?.({ content, language, revisionId });
+      };
+
       const handleError = ({ message } = {}) => {
         setCrdtError(message || 'Collaborative synchronization failed.');
       };
 
       socket.on('crdt-sync', handleSync);
       socket.on('crdt-operation', handleOperation);
+      socket.on('document-restored', handleRestore);
       socket.on('crdt-error', handleError);
 
-      // Room join is performed by useCollaboration in another effect. Wait for
-      // its room assignment before asking the CRDT bridge for state.
       const start = Date.now();
       let retryTimer = null;
       const tryRequest = () => {
@@ -89,6 +104,7 @@ export const useCrdtCollaboration = ({
         if (retryTimer) window.clearTimeout(retryTimer);
         socket.off('crdt-sync', handleSync);
         socket.off('crdt-operation', handleOperation);
+        socket.off('document-restored', handleRestore);
         socket.off('crdt-error', handleError);
       };
     };
@@ -111,7 +127,7 @@ export const useCrdtCollaboration = ({
       initializedRef.current = false;
       setCrdtReady(false);
     };
-  }, [enabled, room, roomCode, emitText, requestSync]);
+  }, [enabled, room, roomCode, emitText, requestSync, onDocumentRestored]);
 
   const handleLocalChange = useCallback(async (nextText) => {
     if (!enabled || applyingRemoteRef.current || !crdtReady) return;

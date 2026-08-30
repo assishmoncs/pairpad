@@ -65,14 +65,21 @@ export const AuthProvider = ({ children }) => {
         persistAccessToken(nextToken);
       } catch (error) {
         if (cancelled) return;
-        persistAccessToken(null);
-        setUser(null);
-        setAuthStatus(error.response?.status === 401 ? AUTH_STATUS.UNAUTHENTICATED : AUTH_STATUS.UNAVAILABLE);
-        setAuthError(error.response?.status === 401 ? '' : 'We could not verify your session. Please try again.');
+        if (error.response?.status === 401) {
+          persistAccessToken(null);
+          setUser(null);
+          setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+          setAuthError('');
+        } else {
+          setAuthStatus(AUTH_STATUS.UNAVAILABLE);
+          setAuthError('We could not verify your session. Please try again.');
+        }
       }
     };
     bootstrap();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -85,7 +92,8 @@ export const AuthProvider = ({ children }) => {
           error.response?.status !== 401 ||
           originalRequest?._retry ||
           originalRequest?.url?.includes('/api/auth/')
-        ) return Promise.reject(error);
+        )
+          return Promise.reject(error);
 
         originalRequest._retry = true;
         try {
@@ -117,7 +125,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = (email, password) => authenticate('/api/auth/login', { email, password });
-  const register = (name, email, password) => authenticate('/api/auth/register', { name, email, password });
+  const register = (name, email, password) =>
+    authenticate('/api/auth/register', { name, email, password });
 
   const logout = async () => {
     try {
@@ -142,7 +151,9 @@ export const AuthProvider = ({ children }) => {
   const refreshUser = async () => {
     try {
       const nextToken = await refreshAccessToken();
-      const response = await axios.get('/api/auth/me', { headers: { Authorization: `Bearer ${nextToken}` } });
+      const response = await axios.get('/api/auth/me', {
+        headers: { Authorization: `Bearer ${nextToken}` },
+      });
       setUser(response.data.data.user);
       setAuthStatus(AUTH_STATUS.AUTHENTICATED);
       setAuthError('');

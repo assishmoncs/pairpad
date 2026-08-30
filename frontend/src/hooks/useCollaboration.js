@@ -33,12 +33,22 @@ export const useCollaboration = ({
   }, []);
 
   const callbacksRef = useRef({
-    onRemoteCode, onRoomDeleted, onChatIncoming, onExecutionResult, onRoleUpdated, fetchMessages
+    onRemoteCode,
+    onRoomDeleted,
+    onChatIncoming,
+    onExecutionResult,
+    onRoleUpdated,
+    fetchMessages,
   });
 
   useEffect(() => {
     callbacksRef.current = {
-      onRemoteCode, onRoomDeleted, onChatIncoming, onExecutionResult, onRoleUpdated, fetchMessages
+      onRemoteCode,
+      onRoomDeleted,
+      onChatIncoming,
+      onExecutionResult,
+      onRoleUpdated,
+      fetchMessages,
     };
   });
 
@@ -78,23 +88,47 @@ export const useCollaboration = ({
       setRemoteCursors((current) => new Map(current).set(userId, cursor));
       const previousTimer = cursorExpiryTimersRef.current.get(userId);
       if (previousTimer) clearTimeout(previousTimer);
-      cursorExpiryTimersRef.current.set(userId, window.setTimeout(() => {
-        setRemoteCursors((current) => {
-          const next = new Map(current);
-          next.delete(userId);
-          return next;
-        });
-        cursorExpiryTimersRef.current.delete(userId);
-      }, 15000));
+      cursorExpiryTimersRef.current.set(
+        userId,
+        window.setTimeout(() => {
+          setRemoteCursors((current) => {
+            const next = new Map(current);
+            next.delete(userId);
+            return next;
+          });
+          cursorExpiryTimersRef.current.delete(userId);
+        }, 15000)
+      );
     });
-    const unsubRole = socketService.on('member-role-updated', ({ role, userId } = {}) => callbacksRef.current.onRoleUpdated?.(role, userId));
-    const unsubCode = socketService.on('code-change', (data) => callbacksRef.current.onRemoteCode?.(data));
-    const unsubChat = socketService.on('chat-message', (data) => callbacksRef.current.onChatIncoming?.(data));
-    const unsubExecution = socketService.on('code-execution-result', (data) => callbacksRef.current.onExecutionResult?.(data));
-    const unsubDeleted = socketService.on('room-deleted', () => callbacksRef.current.onRoomDeleted?.());
+    const unsubRole = socketService.on('member-role-updated', ({ role, userId } = {}) =>
+      callbacksRef.current.onRoleUpdated?.(role, userId)
+    );
+    const unsubCode = socketService.on('code-change', (data) =>
+      callbacksRef.current.onRemoteCode?.(data)
+    );
+    const unsubChat = socketService.on('chat-message', (data) =>
+      callbacksRef.current.onChatIncoming?.(data)
+    );
+    const unsubExecution = socketService.on('code-execution-result', (data) =>
+      callbacksRef.current.onExecutionResult?.(data)
+    );
+    const unsubDeleted = socketService.on('room-deleted', () =>
+      callbacksRef.current.onRoomDeleted?.()
+    );
 
     socketCleanupRef.current = () => {
-      [unsubConnect, unsubDisconnect, unsubPresence, unsubUserLeft, unsubCursor, unsubRole, unsubCode, unsubChat, unsubExecution, unsubDeleted].forEach((fn) => fn());
+      [
+        unsubConnect,
+        unsubDisconnect,
+        unsubPresence,
+        unsubUserLeft,
+        unsubCursor,
+        unsubRole,
+        unsubCode,
+        unsubChat,
+        unsubExecution,
+        unsubDeleted,
+      ].forEach((fn) => fn());
       clearRemoteCursors();
     };
 

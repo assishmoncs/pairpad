@@ -540,9 +540,21 @@
   white-space: nowrap;
 }
 
-.role-owner { background: #422006; border-color: #92400e; color: #fbbf24; }
-.role-editor { background: #052e16; border-color: #166534; color: #86efac; }
-.role-viewer { background: #172554; border-color: #1d4ed8; color: #93c5fd; }
+.role-owner {
+  background: #422006;
+  border-color: #92400e;
+  color: #fbbf24;
+}
+.role-editor {
+  background: #052e16;
+  border-color: #166534;
+  color: #86efac;
+}
+.role-viewer {
+  background: #172554;
+  border-color: #1d4ed8;
+  color: #93c5fd;
+}
 
 .members-section {
   flex: 0 0 auto;
@@ -590,7 +602,9 @@
   font-size: 0.78rem;
 }
 
-.crdt-status { color: #4ade80; }
+.crdt-status {
+  color: #4ade80;
+}
 
 @media (max-width: 768px) {
   .room-header,

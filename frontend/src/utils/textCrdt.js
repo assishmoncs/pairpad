@@ -7,7 +7,7 @@ const cloneNode = (node) => ({
   deleted: Boolean(node.deleted),
 });
 
-const compareIds = (a, b) => a.localeCompare(b);
+const compareIds = (a, b) => b.localeCompare(a);
 
 export class TextCrdt {
   constructor(clientId) {
@@ -22,9 +22,8 @@ export class TextCrdt {
 
     if (!serializedState) return;
     try {
-      const parsed = typeof serializedState === 'string'
-        ? JSON.parse(serializedState)
-        : serializedState;
+      const parsed =
+        typeof serializedState === 'string' ? JSON.parse(serializedState) : serializedState;
       if (!Array.isArray(parsed?.nodes)) return;
 
       for (const raw of parsed.nodes) {
@@ -86,7 +85,9 @@ export class TextCrdt {
   }
 
   getText() {
-    return this.getVisibleEntries().map((node) => node.char).join('');
+    return this.getVisibleEntries()
+      .map((node) => node.char)
+      .join('');
   }
 
   applyReplaceOperation(operation) {

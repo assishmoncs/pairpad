@@ -248,7 +248,11 @@ const Room = () => {
     <div className="room-page">
       <header className="room-header">
         <div className="header-left">
-          <button onClick={() => navigate('/dashboard')} className="btn-back" aria-label="Back to Dashboard">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="btn-back"
+            aria-label="Back to Dashboard"
+          >
             ← Dashboard
           </button>
           <h1>{room?.name}</h1>
@@ -287,7 +291,11 @@ const Room = () => {
         </div>
       </header>
 
-      {error && <div className="room-alert error-text" aria-live="polite">{error}</div>}
+      {error && (
+        <div className="room-alert error-text" aria-live="polite">
+          {error}
+        </div>
+      )}
 
       <div className="room-layout">
         <div className="editor-section">
@@ -301,12 +309,31 @@ const Room = () => {
               />
             </div>
             {!crdt.crdtReady && !crdt.crdtError && (
-              <span className="saving-indicator" aria-live="polite">Initializing collaborative editor…</span>
+              <span className="saving-indicator" aria-live="polite">
+                Initializing collaborative editor…
+              </span>
             )}
-            {crdt.crdtReady && <span className="saving-indicator" aria-live="polite">CRDT Sync</span>}
-            {isSaving && <span className="saving-indicator" aria-live="polite">Syncing...</span>}
-            {syncError && <span className="error-text" aria-live="polite">{syncError}</span>}
-            <button onClick={handleRunCode} disabled={executing} className="btn-run" aria-label="Run Code">
+            {crdt.crdtReady && (
+              <span className="saving-indicator" aria-live="polite">
+                CRDT Sync
+              </span>
+            )}
+            {isSaving && (
+              <span className="saving-indicator" aria-live="polite">
+                Syncing...
+              </span>
+            )}
+            {syncError && (
+              <span className="error-text" aria-live="polite">
+                {syncError}
+              </span>
+            )}
+            <button
+              onClick={handleRunCode}
+              disabled={executing}
+              className="btn-run"
+              aria-label="Run Code"
+            >
               {executing ? 'Running...' : 'Run Code'}
             </button>
           </div>
@@ -330,7 +357,11 @@ const Room = () => {
         </div>
 
         <aside className="room-sidebar" aria-label="Room Sidebar">
-          <div className="sidebar-section presence-section" aria-live="polite" aria-label="Online Users">
+          <div
+            className="sidebar-section presence-section"
+            aria-live="polite"
+            aria-label="Online Users"
+          >
             <h3>Online Users ({collaboration.onlineUsers.length})</h3>
             <ul className="users-list">
               {collaboration.onlineUsers.map((u) => (

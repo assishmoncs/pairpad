@@ -23,6 +23,9 @@ describe('text CRDT', () => {
     const leftEdit = createReplaceOperation(left, 'AB', 'client-b', 0).operation;
     const rightEdit = createReplaceOperation(right, 'AC', 'client-a', 0).operation;
 
+    applyReplaceOperation(left, leftEdit);
+    applyReplaceOperation(right, rightEdit);
+
     applyReplaceOperation(left, rightEdit);
     applyReplaceOperation(right, leftEdit);
 

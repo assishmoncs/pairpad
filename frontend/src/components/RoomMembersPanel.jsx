@@ -17,13 +17,16 @@ export default function RoomMembersPanel({ room, currentUserId, onRoomUpdated })
     return map;
   }, [room]);
 
-  const isOwner = roleMap.get(String(currentUserId)) === 'owner' || idOf(room?.owner) === String(currentUserId);
+  const isOwner =
+    roleMap.get(String(currentUserId)) === 'owner' || idOf(room?.owner) === String(currentUserId);
 
   const updateRole = async (userId, role) => {
     setSavingUserId(userId);
     setError('');
     try {
-      const response = await axios.patch(`/api/rooms/${room.roomCode}/members/${userId}/role`, { role });
+      const response = await axios.patch(`/api/rooms/${room.roomCode}/members/${userId}/role`, {
+        role,
+      });
       onRoomUpdated?.(response.data.data.room);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update member role.');
@@ -37,7 +40,11 @@ export default function RoomMembersPanel({ room, currentUserId, onRoomUpdated })
   return (
     <div className="sidebar-section members-section">
       <h3>Members ({members.length})</h3>
-      {error && <div className="role-error" role="alert">{error}</div>}
+      {error && (
+        <div className="role-error" role="alert">
+          {error}
+        </div>
+      )}
       <ul className="users-list">
         {members.map((member) => {
           const memberId = idOf(member);
@@ -47,7 +54,10 @@ export default function RoomMembersPanel({ room, currentUserId, onRoomUpdated })
             <li key={memberId} className="member-role-row">
               <div className="member-role-identity">
                 <span className="user-dot"></span>
-                <span>{member.name || 'Anonymous'}{isCurrentUser ? ' (you)' : ''}</span>
+                <span>
+                  {member.name || 'Anonymous'}
+                  {isCurrentUser ? ' (you)' : ''}
+                </span>
               </div>
               {isOwner && role !== 'owner' ? (
                 <select
@@ -56,7 +66,11 @@ export default function RoomMembersPanel({ room, currentUserId, onRoomUpdated })
                   onChange={(event) => updateRole(memberId, event.target.value)}
                   aria-label={`Role for ${member.name || 'member'}`}
                 >
-                  {roles.map((option) => <option key={option} value={option}>{option}</option>)}
+                  {roles.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
                 </select>
               ) : (
                 <span className={`role-badge role-${role}`}>{role}</span>

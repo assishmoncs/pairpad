@@ -20,12 +20,14 @@ describe('cursor helpers', () => {
   });
 
   it('normalizes selections', () => {
-    expect(normalizeCursorSelection({
-      startLineNumber: 1,
-      startColumn: 2,
-      endLineNumber: 3,
-      endColumn: 4,
-    })).toEqual({ startLineNumber: 1, startColumn: 2, endLineNumber: 3, endColumn: 4 });
+    expect(
+      normalizeCursorSelection({
+        startLineNumber: 1,
+        startColumn: 2,
+        endLineNumber: 3,
+        endColumn: 4,
+      })
+    ).toEqual({ startLineNumber: 1, startColumn: 2, endLineNumber: 3, endColumn: 4 });
     expect(normalizeCursorSelection({ startLineNumber: 0 })).toBeNull();
   });
 
@@ -47,9 +49,11 @@ describe('cursor helpers', () => {
   });
 
   it('drops a cursor beyond the current document', () => {
-    expect(buildCursorDecoration({
-      cursor: { position: { line: 20, column: 1 } },
-      editorLineCount: 10,
-    })).toBeNull();
+    expect(
+      buildCursorDecoration({
+        cursor: { position: { line: 20, column: 1 } },
+        editorLineCount: 10,
+      })
+    ).toBeNull();
   });
 });

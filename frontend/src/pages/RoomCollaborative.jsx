@@ -51,11 +51,14 @@ export default function RoomCollaborative() {
   const chat = useChat({ roomCode });
   const execution = useCodeExecution({ code, language, roomCode });
 
-  const handleRoleUpdated = useCallback((role, userId) => {
-    if (!userId || userId === idOf(user)) {
-      setRoom((current) => (current ? { ...current, currentUserRole: role } : current));
-    }
-  }, [user]);
+  const handleRoleUpdated = useCallback(
+    (role, userId) => {
+      if (!userId || userId === idOf(user)) {
+        setRoom((current) => (current ? { ...current, currentUserRole: role } : current));
+      }
+    },
+    [user]
+  );
 
   const collaboration = useCollaboration({
     room,
@@ -89,11 +92,14 @@ export default function RoomCollaborative() {
 
   useRemoteCursors(editor, collaboration.remoteCursors);
 
-  useEffect(() => () => {
-    mounted.current = false;
-    cursorDisposables.current.forEach((dispose) => dispose());
-    if (cursorTimer.current) clearTimeout(cursorTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+      cursorDisposables.current.forEach((dispose) => dispose());
+      if (cursorTimer.current) clearTimeout(cursorTimer.current);
+    },
+    []
+  );
 
   const loadRoom = useCallback(async () => {
     setError('');
@@ -121,25 +127,28 @@ export default function RoomCollaborative() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
 
-  const selectFile = useCallback(async (file) => {
-    if (!file || String(activeFile?._id) === String(file._id)) return;
-    setSwitchingFile(true);
-    setError('');
-    try {
-      const response = await axios.get(`/api/rooms/${roomCode}/files/${file._id}`);
-      const loaded = response.data.data.file;
-      if (!mounted.current) return;
-      setActiveFile(loaded);
-      setLanguage(loaded.language || DEFAULT_LANGUAGE);
-      setCode(typeof loaded.snapshotCode === 'string' ? loaded.snapshotCode : '');
-    } catch (err) {
-      if (mounted.current) {
-        setError(err.response?.data?.message || 'Failed to load file.');
+  const selectFile = useCallback(
+    async (file) => {
+      if (!file || String(activeFile?._id) === String(file._id)) return;
+      setSwitchingFile(true);
+      setError('');
+      try {
+        const response = await axios.get(`/api/rooms/${roomCode}/files/${file._id}`);
+        const loaded = response.data.data.file;
+        if (!mounted.current) return;
+        setActiveFile(loaded);
+        setLanguage(loaded.language || DEFAULT_LANGUAGE);
+        setCode(typeof loaded.snapshotCode === 'string' ? loaded.snapshotCode : '');
+      } catch (err) {
+        if (mounted.current) {
+          setError(err.response?.data?.message || 'Failed to load file.');
+        }
+      } finally {
+        if (mounted.current) setSwitchingFile(false);
       }
-    } finally {
-      if (mounted.current) setSwitchingFile(false);
-    }
-  }, [activeFile?._id, roomCode]);
+    },
+    [activeFile?._id, roomCode]
+  );
 
   const sendCursor = useCallback(() => {
     cursorTimer.current = null;
@@ -148,34 +157,43 @@ export default function RoomCollaborative() {
     if (payload) socketService.sendCursorUpdate(payload.position, payload.selection);
   }, []);
 
-  const queueCursor = useCallback((instance) => {
-    if (!socketService.isConnected()) return;
-    const position = instance.getPosition();
-    if (!position) return;
-    const selection = instance.getSelection();
-    pendingCursor.current = {
-      position: { line: position.lineNumber, column: position.column },
-      selection: selection ? {
-        startLineNumber: selection.startLineNumber,
-        startColumn: selection.startColumn,
-        endLineNumber: selection.endLineNumber,
-        endColumn: selection.endColumn,
-      } : null,
-    };
-    if (!cursorTimer.current) cursorTimer.current = setTimeout(sendCursor, 50);
-  }, [sendCursor]);
+  const queueCursor = useCallback(
+    (instance) => {
+      if (!socketService.isConnected()) return;
+      const position = instance.getPosition();
+      if (!position) return;
+      const selection = instance.getSelection();
+      pendingCursor.current = {
+        position: { line: position.lineNumber, column: position.column },
+        selection: selection
+          ? {
+              startLineNumber: selection.startLineNumber,
+              startColumn: selection.startColumn,
+              endLineNumber: selection.endLineNumber,
+              endColumn: selection.endColumn,
+            }
+          : null,
+      };
+      if (!cursorTimer.current) cursorTimer.current = setTimeout(sendCursor, 50);
+    },
+    [sendCursor]
+  );
 
-  const onEditorMount = useCallback((instance) => {
-    setEditor(instance);
-    cursorDisposables.current.forEach((dispose) => dispose());
-    cursorDisposables.current = [
-      instance.onDidChangeCursorPosition(() => queueCursor(instance)),
-      instance.onDidChangeCursorSelection(() => queueCursor(instance)),
-    ];
-    queueCursor(instance);
-  }, [queueCursor]);
+  const onEditorMount = useCallback(
+    (instance) => {
+      setEditor(instance);
+      cursorDisposables.current.forEach((dispose) => dispose());
+      cursorDisposables.current = [
+        instance.onDidChangeCursorPosition(() => queueCursor(instance)),
+        instance.onDidChangeCursorSelection(() => queueCursor(instance)),
+      ];
+      queueCursor(instance);
+    },
+    [queueCursor]
+  );
 
-  const currentRole = room?.currentUserRole || (idOf(room?.owner) === idOf(user) ? 'owner' : 'editor');
+  const currentRole =
+    room?.currentUserRole || (idOf(room?.owner) === idOf(user) ? 'owner' : 'editor');
   const canEdit = currentRole === 'owner' || currentRole === 'editor';
   const isOwner = currentRole === 'owner';
 
@@ -192,16 +210,19 @@ export default function RoomCollaborative() {
 
   const handleFileChanged = useCallback((file) => {
     if (!file) return;
-    setActiveFile((current) => (
-      current && String(current._id) === String(file._id)
-        ? { ...current, ...file }
-        : current
-    ));
+    setActiveFile((current) =>
+      current && String(current._id) === String(file._id) ? { ...current, ...file } : current
+    );
   }, []);
 
   const deleteRoom = async () => {
     if (!room || !isOwner) return;
-    if (!window.confirm(`Delete room "${room.name}"? This permanently removes the room and its chat history.`)) return;
+    if (
+      !window.confirm(
+        `Delete room "${room.name}"? This permanently removes the room and its chat history.`
+      )
+    )
+      return;
     try {
       await axios.delete(`/api/rooms/${room.roomCode || roomCode}`);
       navigate('/dashboard', { replace: true });
@@ -238,8 +259,12 @@ export default function RoomCollaborative() {
         <h2>We couldn't open this room</h2>
         <p>{error}</p>
         <div className="app-state-actions">
-          <button type="button" onClick={loadRoom} className="btn-primary">Try again</button>
-          <button type="button" onClick={() => navigate('/dashboard')} className="btn-secondary">Back to Dashboard</button>
+          <button type="button" onClick={loadRoom} className="btn-primary">
+            Try again
+          </button>
+          <button type="button" onClick={() => navigate('/dashboard')} className="btn-secondary">
+            Back to Dashboard
+          </button>
         </div>
       </div>
     );
@@ -249,47 +274,121 @@ export default function RoomCollaborative() {
     <div className={`room-page${focusMode ? ' focus-mode' : ''}`}>
       <header className="room-header">
         <div className="header-left">
-          <button type="button" onClick={() => navigate('/dashboard')} className="btn-back" aria-label="Back to Dashboard">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="btn-back"
+            aria-label="Back to Dashboard"
+          >
             ← Dashboard
           </button>
           <h1>{room?.name}</h1>
-          {activeFile && <span className="active-file-badge" title="Active workspace file">{activeFile.path}</span>}
+          {activeFile && (
+            <span className="active-file-badge" title="Active workspace file">
+              {activeFile.path}
+            </span>
+          )}
           <span className={`role-badge role-${currentRole}`}>{currentRole}</span>
-          <button className="btn-room-code" type="button" onClick={copyRoomCode} aria-label={`Copy room code ${room?.roomCode}`}>
+          <button
+            className="btn-room-code"
+            type="button"
+            onClick={copyRoomCode}
+            aria-label={`Copy room code ${room?.roomCode}`}
+          >
             {room?.roomCode}
             <span className="room-code-copy-hint">{copied ? ' ✓ Copied!' : ' · Copy'}</span>
           </button>
         </div>
         <div className="header-actions">
-          <button type="button" className="workspace-help-button" onClick={() => setShowShortcuts((value) => !value)} aria-expanded={showShortcuts} aria-controls="workspace-shortcuts">Shortcuts</button>
-          <button type="button" className="workspace-help-button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus mode'}</button>
-          {isOwner && <button type="button" onClick={deleteRoom} className="btn-delete-room">Delete Room</button>}
-          <div className="connection-status" aria-label={`Collaboration status: ${collaboration.connected ? 'connected' : collaboration.reconnecting ? 'reconnecting' : 'disconnected'}`}>
-            <span className={`status-dot ${collaboration.connected ? 'connected' : collaboration.reconnecting ? 'reconnecting' : 'disconnected'}`}></span>
-            <span>{collaboration.connected ? 'Connected' : collaboration.reconnecting ? 'Reconnecting…' : 'Disconnected'}</span>
-            {crdt.crdtReady && collaboration.connected && <span className="crdt-status"> · Live CRDT</span>}
+          <button
+            type="button"
+            className="workspace-help-button"
+            onClick={() => setShowShortcuts((value) => !value)}
+            aria-expanded={showShortcuts}
+            aria-controls="workspace-shortcuts"
+          >
+            Shortcuts
+          </button>
+          <button
+            type="button"
+            className="workspace-help-button"
+            onClick={() => setFocusMode((value) => !value)}
+            aria-pressed={focusMode}
+          >
+            {focusMode ? 'Exit focus' : 'Focus mode'}
+          </button>
+          {isOwner && (
+            <button type="button" onClick={deleteRoom} className="btn-delete-room">
+              Delete Room
+            </button>
+          )}
+          <div
+            className="connection-status"
+            aria-label={`Collaboration status: ${collaboration.connected ? 'connected' : collaboration.reconnecting ? 'reconnecting' : 'disconnected'}`}
+          >
+            <span
+              className={`status-dot ${collaboration.connected ? 'connected' : collaboration.reconnecting ? 'reconnecting' : 'disconnected'}`}
+            ></span>
+            <span>
+              {collaboration.connected
+                ? 'Connected'
+                : collaboration.reconnecting
+                  ? 'Reconnecting…'
+                  : 'Disconnected'}
+            </span>
+            {crdt.crdtReady && collaboration.connected && (
+              <span className="crdt-status"> · Live CRDT</span>
+            )}
           </div>
         </div>
       </header>
 
       {showShortcuts && (
-        <div id="workspace-shortcuts" className="workspace-shortcuts" role="dialog" aria-label="Keyboard shortcuts">
+        <div
+          id="workspace-shortcuts"
+          className="workspace-shortcuts"
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+        >
           <h2>Keyboard shortcuts</h2>
           <dl>
-            <dt><kbd>Ctrl/Cmd</kbd> + <kbd>Enter</kbd></dt><dd>Run active file</dd>
-            <dt><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd></dt><dd>Copy room code</dd>
-            <dt><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd></dt><dd>Toggle focus mode</dd>
+            <dt>
+              <kbd>Ctrl/Cmd</kbd> + <kbd>Enter</kbd>
+            </dt>
+            <dd>Run active file</dd>
+            <dt>
+              <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>
+            </dt>
+            <dd>Copy room code</dd>
+            <dt>
+              <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>
+            </dt>
+            <dd>Toggle focus mode</dd>
           </dl>
         </div>
       )}
 
       <ConnectionBanner
-        status={collaboration.connected ? 'connected' : collaboration.reconnecting ? 'reconnecting' : 'disconnected'}
+        status={
+          collaboration.connected
+            ? 'connected'
+            : collaboration.reconnecting
+              ? 'reconnecting'
+              : 'disconnected'
+        }
         message={collaboration.socketError}
         onRetry={retryConnection}
       />
-      {error && <div className="room-alert error-text" aria-live="polite">{error}</div>}
-      {crdt.crdtError && <div className="room-alert error-text" aria-live="polite">{crdt.crdtError}</div>}
+      {error && (
+        <div className="room-alert error-text" aria-live="polite">
+          {error}
+        </div>
+      )}
+      {crdt.crdtError && (
+        <div className="room-alert error-text" aria-live="polite">
+          {crdt.crdtError}
+        </div>
+      )}
 
       <div className="room-layout">
         <div className="editor-section">
@@ -304,7 +403,15 @@ export default function RoomCollaborative() {
               />
             </div>
             <span className="saving-indicator" aria-live="polite">
-              {switchingFile ? 'Loading file…' : saving ? 'Syncing…' : crdt.crdtReady ? `CRDT · ${currentRole}` : activeFile ? 'Initializing…' : 'Select a file'}
+              {switchingFile
+                ? 'Loading file…'
+                : saving
+                  ? 'Syncing…'
+                  : crdt.crdtReady
+                    ? `CRDT · ${currentRole}`
+                    : activeFile
+                      ? 'Initializing…'
+                      : 'Select a file'}
             </span>
             <button
               type="button"
@@ -361,7 +468,14 @@ export default function RoomCollaborative() {
             onSelectFile={selectFile}
             onFileChanged={handleFileChanged}
           />
-          <InterviewPanel roomCode={roomCode} room={room} currentRole={currentRole} code={code} language={language} onRoomUpdated={setRoom} />
+          <InterviewPanel
+            roomCode={roomCode}
+            room={room}
+            currentRole={currentRole}
+            code={code}
+            language={language}
+            onRoomUpdated={setRoom}
+          />
           <div className="sidebar-section presence-section" aria-live="polite">
             <h3>Online Users ({collaboration.onlineUsers.length})</h3>
             {collaboration.onlineUsers.length ? (
@@ -373,10 +487,17 @@ export default function RoomCollaborative() {
                   </li>
                 ))}
               </ul>
-            ) : <p className="no-users">No other collaborators online.</p>}
+            ) : (
+              <p className="no-users">No other collaborators online.</p>
+            )}
           </div>
           <RoomMembersPanel room={room} currentUserId={idOf(user)} onRoomUpdated={setRoom} />
-          <RevisionHistoryPanel roomCode={roomCode} code={code} language={language} currentRole={currentRole} />
+          <RevisionHistoryPanel
+            roomCode={roomCode}
+            code={code}
+            language={language}
+            currentRole={currentRole}
+          />
           <ExecutionPanel
             executionResult={execution.executionResult}
             executionError={execution.executionError}

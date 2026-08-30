@@ -16,13 +16,14 @@ describe('execution worker client contract', () => {
   });
 
   test('configured worker sends authenticated execution request', async () => {
-    axios.post.mockResolvedValue({ status: 200, data: { result: { status: 'success', output: 'ok' } } });
+    const axiosMock = require('axios');
+    axiosMock.post.mockResolvedValue({ status: 200, data: { result: { status: 'success', output: 'ok' } } });
     const { executeInWorker, isWorkerConfigured } = require('../src/services/executionWorkerService');
 
     expect(isWorkerConfigured()).toBe(true);
     await expect(executeInWorker({ sourceCode: 'console.log(1)', language: 'javascript', stdin: '' }))
       .resolves.toEqual({ status: 'success', output: 'ok' });
-    expect(axios.post).toHaveBeenCalledWith(
+    expect(axiosMock.post).toHaveBeenCalledWith(
       'http://worker:7000/execute',
       { sourceCode: 'console.log(1)', language: 'javascript', stdin: '' },
       expect.objectContaining({
@@ -32,7 +33,8 @@ describe('execution worker client contract', () => {
   });
 
   test('worker errors are surfaced to execution layer', async () => {
-    axios.post.mockResolvedValue({ status: 503, data: { error: 'worker unavailable' } });
+    const axiosMock = require('axios');
+    axiosMock.post.mockResolvedValue({ status: 503, data: { error: 'worker unavailable' } });
     const { executeInWorker } = require('../src/services/executionWorkerService');
     await expect(executeInWorker({ sourceCode: '1', language: 'javascript' }))
       .rejects.toThrow('worker unavailable');

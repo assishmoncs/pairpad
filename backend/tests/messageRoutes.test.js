@@ -20,9 +20,13 @@ app.use('/api/messages', messageRoutes);
 
 // Mimics Message.find(...).populate(...).sort(...).limit(...)
 const messageQuery = (messages) => ({
-  populate: jest.fn().mockReturnValue({
-    sort: jest.fn().mockReturnValue({
-      limit: jest.fn().mockResolvedValue(messages),
+  select: jest.fn().mockReturnValue({
+    populate: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue(messages)
+        }),
+      }),
     }),
   }),
 });
@@ -55,7 +59,7 @@ describe('GET /api/messages/room/:roomCode', () => {
     expect(Room.findOne).toHaveBeenCalledWith({ roomCode: 'ABC123' });
     expect(Message.find).toHaveBeenCalledWith({ room: 'room-1' });
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual({ messages, count: 1 });
+    expect(response.body.data).toEqual({ messages, count: 1, hasMore: false, nextBefore: undefined });
   });
 
   it('allows the owner even when not listed as a member', async () => {

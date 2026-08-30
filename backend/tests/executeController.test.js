@@ -101,7 +101,7 @@ describe('executeCode authorization', () => {
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({
-      message: 'You must be a member of the room to execute code.',
+      message: 'Editor permission is required to execute code in this room.',
     });
   });
 
@@ -178,11 +178,11 @@ describe('executeCode error mapping', () => {
   });
 
   it.each([
-    ['Judge0 API key not configured.', 503, 'Code execution service not configured. Please contact the administrator.'],
+    [new Error('Judge0 API key not configured.'), 503, 'Code execution service is unavailable or not configured.'],
     ['Rate limit exceeded.', 429, 'Rate limit exceeded. Please try again in a few moments.'],
     ['Execution timed out.', 408, 'Code execution timed out. The code may be taking too long to run.'],
   ])('maps "%s" to %i', async (thrown, status, message) => {
-    judge0Service.submitCode.mockRejectedValue(new Error(thrown));
+    judge0Service.submitCode.mockRejectedValue(thrown instanceof Error ? thrown : new Error(thrown));
     const req = createReq({}, { io: null, app: { get: () => null } });
     const res = createRes();
 

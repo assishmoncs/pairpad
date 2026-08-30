@@ -21,7 +21,7 @@ const mockHandlers = Object.fromEntries(
   ])
 );
 
-jest.mock('../src/controllers/authController', () => ({
+jest.mock('../src/controllers/authSessionController', () => ({
   register: (...args) => mockHandlers.register(...args),
   login: (...args) => mockHandlers.login(...args),
   getMe: (...args) => mockHandlers.getMe(...args),

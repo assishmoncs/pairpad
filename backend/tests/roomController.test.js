@@ -23,8 +23,8 @@ const {
   deleteRoom,
 } = require('../src/controllers/roomController');
 
-const USER_ID = 'user-1';
-const OTHER_ID = 'user-2';
+const USER_ID = '507f1f77bcf86cd799439011';
+const OTHER_ID = '507f1f77bcf86cd799439012';
 
 const createRes = () => {
   const res = {};
@@ -41,18 +41,28 @@ const createReq = (overrides = {}) => ({
   ...overrides,
 });
 
-// Mimics Room.findById(...).populate(...).populate(...) chains.
+// Mimics Room.findById(...).select(...).populate(...).populate(...).populate(...) chains.
 const populated = (room) => ({
-  populate: jest.fn().mockReturnValue({
-    populate: jest.fn().mockResolvedValue(room),
+  select: jest.fn().mockReturnValue({
+    populate: jest.fn().mockReturnValue({
+      populate: jest.fn().mockReturnValue({
+        populate: jest.fn().mockResolvedValue(room),
+      }),
+    }),
   }),
 });
 
-// Mimics Room.find(...).populate(...).populate(...).sort(...) chains.
+// Mimics Room.find(...).select(...).populate(...).populate(...).populate(...).sort(...).lean() chains.
 const populatedList = (rooms) => ({
-  populate: jest.fn().mockReturnValue({
+  select: jest.fn().mockReturnValue({
     populate: jest.fn().mockReturnValue({
-      sort: jest.fn().mockResolvedValue(rooms),
+      populate: jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          sort: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue(rooms),
+          }),
+        }),
+      }),
     }),
   }),
 });
@@ -103,7 +113,7 @@ describe('createRoom', () => {
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({
       message: 'Room created successfully.',
-      data: { room: populatedRoom },
+      data: { room: { ...populatedRoom, currentUserRole: null } },
     });
   });
 
@@ -174,7 +184,7 @@ describe('getUserRooms', () => {
     expect(Room.find).toHaveBeenCalledWith({ members: USER_ID });
     expect(res.json).toHaveBeenCalledWith({
       message: 'Rooms retrieved successfully.',
-      data: { rooms, count: 2 },
+      data: { rooms: rooms.map(r => ({ ...r, currentUserRole: null })), count: 2 },
     });
   });
 
@@ -209,7 +219,7 @@ describe('getRoom', () => {
     expect(Room.findOne).toHaveBeenCalledWith({ roomCode: 'ABC123' });
     expect(res.json).toHaveBeenCalledWith({
       message: 'Room retrieved successfully.',
-      data: { room },
+      data: { room: { ...room, currentUserRole: 'owner' } },
     });
   });
 
@@ -224,7 +234,7 @@ describe('getRoom', () => {
 
     expect(Room.findById).toHaveBeenCalledWith(roomId);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { room } })
+      expect.objectContaining({ data: { room: { ...room, currentUserRole: 'editor' } } })
     );
   });
 
@@ -305,11 +315,12 @@ describe('joinRoom', () => {
   it('is a no-op for a user who already joined', async () => {
     const room = {
       _id: 'room-1',
+      owner: USER_ID,
       members: [{ toString: () => USER_ID }],
       save: jest.fn(),
     };
     Room.findOne.mockResolvedValue(room);
-    const fullRoom = { _id: 'room-1' };
+    const fullRoom = { _id: 'room-1', owner: USER_ID, memberRoles: [] };
     Room.findById.mockReturnValue(populated(fullRoom));
     const res = createRes();
 
@@ -318,18 +329,20 @@ describe('joinRoom', () => {
     expect(room.save).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({
       message: 'You are already a member of this room.',
-      data: { room: fullRoom },
+      data: { room: expect.objectContaining({ _id: 'room-1' }) },
     });
   });
 
   it('adds a new member and returns the updated room', async () => {
     const room = {
       _id: 'room-1',
+      owner: USER_ID,
       members: [{ toString: () => OTHER_ID }],
+      memberRoles: [],
       save: jest.fn().mockResolvedValue(undefined),
     };
     Room.findOne.mockResolvedValue(room);
-    const fullRoom = { _id: 'room-1' };
+    const fullRoom = { _id: 'room-1', owner: USER_ID, memberRoles: [] };
     Room.findById.mockReturnValue(populated(fullRoom));
     const res = createRes();
 
@@ -339,7 +352,7 @@ describe('joinRoom', () => {
     expect(room.save).toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({
       message: 'Successfully joined the room.',
-      data: { room: fullRoom },
+      data: { room: expect.objectContaining({ _id: 'room-1' }) },
     });
   });
 
@@ -387,6 +400,7 @@ describe('leaveRoom', () => {
     const room = {
       owner: { toString: () => OTHER_ID },
       members: [{ toString: () => USER_ID }, { toString: () => OTHER_ID }],
+      memberRoles: [],
       save: jest.fn().mockResolvedValue(undefined),
     };
     Room.findOne.mockResolvedValue(room);
@@ -469,6 +483,7 @@ describe('transferOwnership', () => {
       _id: 'room-1',
       owner: { toString: () => USER_ID },
       members: [{ toString: () => OTHER_ID }],
+      memberRoles: [],
       save: jest.fn().mockResolvedValue(undefined),
     };
     Room.findOne.mockResolvedValue(room);
@@ -485,7 +500,7 @@ describe('transferOwnership', () => {
     expect(room.save).toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({
       message: 'Ownership transferred successfully.',
-      data: { room: fullRoom },
+      data: { room: { ...fullRoom, currentUserRole: null } },
     });
   });
 });

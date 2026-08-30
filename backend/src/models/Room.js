@@ -17,7 +17,7 @@ const roomSchema = new mongoose.Schema(
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     memberRoles: { type: [roomMemberSchema], default: [] },
     language: { type: String, default: 'javascript', enum: ['javascript', 'python', 'java', 'cpp', 'c', 'go', 'rust', 'typescript', 'php', 'ruby'] },
-    description: { type: String, trim: true, maxlength: 200 },
+    description: { type: String, trim: true, maxlength: [200, 'Description cannot exceed 200 characters'] },
     snapshotCode: { type: String, default: '', maxlength: 524288 },
     crdtState: { type: String, default: '', maxlength: 4194304 },
     interview: { type: roomInterviewSchema, default: null },

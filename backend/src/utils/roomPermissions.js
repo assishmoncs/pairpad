@@ -11,7 +11,8 @@ const normalizeRole = (role) => {
 const getMemberRole = (room, userId) => {
   if (!room || !userId) return null;
   const requestedId = userId.toString();
-  if (room.owner?.toString() === requestedId) return ROLES.OWNER;
+  const ownerId = (room.owner?._id || room.owner)?.toString();
+  if (ownerId === requestedId) return ROLES.OWNER;
 
   const roleEntry = (room.memberRoles || []).find((entry) => {
     const memberId = entry?.user?._id || entry?.user || entry?.userId;

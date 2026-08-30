@@ -1,3 +1,7 @@
+jest.mock('../src/services/executionService', () => ({
+  executeCode: jest.fn(),
+}));
+
 const executionService = require('../src/services/executionService');
 const {
   startInterview,
@@ -16,8 +20,9 @@ const makeRoom = (status = 'draft') => ({
   interview: {
     title: 'Test', description: 'Solve it', language: 'javascript', durationMinutes: 10,
     status, startedAt: status === 'running' ? new Date() : null, pausedAt: null, endedAt: null,
-    remainingSeconds: 600, publicTests: [], hiddenTests: [], save: jest.fn(async function save() { return this; }),
+    remainingSeconds: 600, publicTests: [], hiddenTests: [],
   },
+  save: jest.fn(async function save() { return this; }),
 });
 
 test('owner can start, pause, resume and end interview', async () => {

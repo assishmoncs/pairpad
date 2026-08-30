@@ -9,7 +9,11 @@ export default function ConnectionBanner({ status, message, onRetry }) {
   };
 
   return (
-    <div className={`connection-banner connection-banner-${status}`} role="status" aria-live="polite">
+    <div
+      className={`connection-banner connection-banner-${status}`}
+      role="status"
+      aria-live="polite"
+    >
       <div>
         <strong>{labels[status] || 'Connection unavailable'}</strong>
         {message ? <span>{message}</span> : null}

@@ -115,7 +115,11 @@ const Dashboard = () => {
         </button>
       </header>
 
-      {error && <div className="error-message" aria-live="polite">{error}</div>}
+      {error && (
+        <div className="error-message" aria-live="polite">
+          {error}
+        </div>
+      )}
 
       <div className="dashboard-content">
         <div className="rooms-section">

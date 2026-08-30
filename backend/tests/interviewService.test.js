@@ -22,9 +22,9 @@ const room = (overrides = {}) => ({
     candidateId: editor,
     publicTests: [{ id: 'pub1', name: 'Example', stdin: '2 3', expectedOutput: '5', hidden: false }],
     hiddenTests: [{ id: 'hid1', name: 'Edge secret', stdin: '9 1', expectedOutput: '10', hidden: true }],
-    save: jest.fn(async function save() { return this; }),
     ...overrides,
   },
+  save: jest.fn(async function save() { return this; }),
   ...overrides,
 });
 

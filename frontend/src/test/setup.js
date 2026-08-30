@@ -13,6 +13,16 @@ vi.mock('axios', () => ({
         common: {},
       },
     },
+    interceptors: {
+      response: {
+        use: vi.fn(() => 1),
+        eject: vi.fn(),
+      },
+      request: {
+        use: vi.fn(() => 1),
+        eject: vi.fn(),
+      },
+    },
   },
 }));
 

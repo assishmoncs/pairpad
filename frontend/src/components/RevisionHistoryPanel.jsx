@@ -66,7 +66,9 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
     if (!previous) return;
     try {
       setError('');
-      const response = await axios.get(`/api/rooms/${roomCode}/history/diff?from=${previous._id}&to=${revision._id}`);
+      const response = await axios.get(
+        `/api/rooms/${roomCode}/history/diff?from=${previous._id}&to=${revision._id}`
+      );
       setDiff(response.data.data);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to compare revisions.');
@@ -75,7 +77,8 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
 
   const restore = async (revision) => {
     if (currentRole !== 'owner') return;
-    if (!window.confirm(`Restore revision from ${new Date(revision.createdAt).toLocaleString()}?`)) return;
+    if (!window.confirm(`Restore revision from ${new Date(revision.createdAt).toLocaleString()}?`))
+      return;
 
     setRestoring(true);
     setError('');
@@ -95,17 +98,37 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
     <div className="revision-history-panel sidebar-section">
       <div className="revision-header">
         <h3>History</h3>
-        <button type="button" onClick={loadHistory} disabled={loading} className="revision-refresh" aria-label="Refresh revision history">{loading ? '…' : '↻'}</button>
+        <button
+          type="button"
+          onClick={loadHistory}
+          disabled={loading}
+          className="revision-refresh"
+          aria-label="Refresh revision history"
+        >
+          {loading ? '…' : '↻'}
+        </button>
       </div>
 
       {currentRole !== 'viewer' && (
         <div className="revision-checkpoint">
-          <input value={message} onChange={(event) => setMessage(event.target.value)} maxLength={120} placeholder="Checkpoint message (optional)" aria-label="Checkpoint message" />
-          <button type="button" onClick={createCheckpoint}>Save</button>
+          <input
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            maxLength={120}
+            placeholder="Checkpoint message (optional)"
+            aria-label="Checkpoint message"
+          />
+          <button type="button" onClick={createCheckpoint}>
+            Save
+          </button>
         </div>
       )}
 
-      {error && <div className="revision-error" role="alert">{error}</div>}
+      {error && (
+        <div className="revision-error" role="alert">
+          {error}
+        </div>
+      )}
 
       <div className="revision-list">
         {revisions.map((revision, index) => {
@@ -114,23 +137,39 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
           const hasPrevious = index < revisions.length - 1;
           return (
             <div key={revision._id} className={`revision-item ${active ? 'selected' : ''}`}>
-              <button type="button" className="revision-main" onClick={() => setSelectedRevision(active ? null : revision)}>
+              <button
+                type="button"
+                className="revision-main"
+                onClick={() => setSelectedRevision(active ? null : revision)}
+              >
                 <span className="revision-message">{revision.message || 'Checkpoint'}</span>
-                <span className="revision-meta">{authorName} · {new Date(revision.createdAt).toLocaleString()} · {revision.source}</span>
+                <span className="revision-meta">
+                  {authorName} · {new Date(revision.createdAt).toLocaleString()} · {revision.source}
+                </span>
               </button>
               {active && (
                 <div className="revision-actions">
                   <span>{revision.language}</span>
                   <div className="revision-action-group">
-                    {hasPrevious && <button type="button" onClick={() => compareWithPrevious(revision)}>Compare</button>}
-                    {currentRole === 'owner' && <button type="button" onClick={() => restore(revision)} disabled={restoring}>{restoring ? 'Restoring…' : 'Restore'}</button>}
+                    {hasPrevious && (
+                      <button type="button" onClick={() => compareWithPrevious(revision)}>
+                        Compare
+                      </button>
+                    )}
+                    {currentRole === 'owner' && (
+                      <button type="button" onClick={() => restore(revision)} disabled={restoring}>
+                        {restoring ? 'Restoring…' : 'Restore'}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
             </div>
           );
         })}
-        {!loading && revisions.length === 0 && <div className="revision-empty">No revisions yet.</div>}
+        {!loading && revisions.length === 0 && (
+          <div className="revision-empty">No revisions yet.</div>
+        )}
       </div>
 
       {diff && (
@@ -138,7 +177,10 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
           <div className="revision-diff-header">Revision comparison</div>
           <div className="revision-diff-body">
             {buildLineDiff(diff.from.content, diff.to.content).map((row, index) => (
-              <pre key={`${row.type}-${index}`} className={`diff-line diff-${row.type}`}>{row.type === 'added' ? '+ ' : row.type === 'removed' ? '- ' : '  '}{row.text}</pre>
+              <pre key={`${row.type}-${index}`} className={`diff-line diff-${row.type}`}>
+                {row.type === 'added' ? '+ ' : row.type === 'removed' ? '- ' : '  '}
+                {row.text}
+              </pre>
             ))}
           </div>
         </div>

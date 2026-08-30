@@ -50,7 +50,7 @@ const deserializeState = (serialized) => {
   }
 };
 
-const compareIds = (a, b) => a.localeCompare(b);
+const compareIds = (a, b) => b.localeCompare(a);
 
 /** Return all node ids in deterministic document order, including tombstones. */
 const orderedIds = (nodes) => {

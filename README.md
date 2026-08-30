@@ -14,7 +14,7 @@
 
 ---
 
-PairPad is a full-stack collaborative coding platform built around a Monaco editor, Socket.IO real-time sync, and an integrated code execution engine. Multiple users can join a shared room, edit the same code simultaneously, chat, run code, and see each other's presence — all in the browser.
+PairPad is a full-stack collaborative coding platform built around a Monaco editor, Socket.IO transport, a conflict-free text CRDT, MongoDB persistence, and an integrated code execution engine. Multiple users can join a shared room, edit the same code concurrently, chat, run code, and see each other's presence in the browser.
 
 ---
 
@@ -24,20 +24,21 @@ PairPad is a full-stack collaborative coding platform built around a Monaco edit
 |----------|-------------|
 | **Authentication** | Register, login, JWT sessions, auth retry on server hiccup |
 | **Rooms** | Create rooms with 6-character invite codes, join/leave/delete, multi-language support |
-| **Live Editing** | Monaco Editor with Socket.IO synchronization |
+| **Live Editing** | Monaco Editor backed by a dependency-free sequence CRDT; concurrent operations converge deterministically |
+| **Persistence** | CRDT state and a plain-text compatibility snapshot are persisted to MongoDB with debounced writes |
 | **Presence** | Real-time list of who is online in the current room |
 | **Chat** | Persistent in-room messaging (MongoDB-backed) with real-time broadcast |
 | **Code Execution** | Judge0 API integration (RapidAPI or self-hosted) with automatic **local fallback** for JS/TS/Python |
 | **Security** | Rate limiting on auth and execution endpoints, CORS guard, Helmet/CSP, centralized error handling |
-| **Resilience** | Automatic socket reconnection, reconnecting badge, transient auth-unavailable state |
+| **Resilience** | Automatic socket reconnection, reconnecting badge, CRDT state synchronization after reconnect |
 
 ### Current Limitations (MVP)
 
-- Concurrent edits currently use **last-write-wins** full-document synchronization; CRDT migration is the next major collaboration milestone.
 - Presence is tracked **in-memory** — horizontal scaling requires a shared adapter such as Redis.
-- Editor snapshots are **debounced (500 ms)**, so a hard crash can lose the most recent unflushed changes.
+- Remote Monaco cursor rendering is still a separate milestone; cursor events already exist in the transport layer.
 - Authentication currently uses bearer tokens in browser storage; hardened cookie sessions and refresh-token rotation are planned.
 - The local code runner is a **resource guard, not a security sandbox**; production should use isolated Judge0/container workers.
+- The current CRDT is character-level and coalesces editor changes to one contiguous replacement region per event; it is designed for deterministic convergence, not bandwidth-optimal delta encoding.
 
 ---
 
@@ -45,11 +46,11 @@ PairPad is a full-stack collaborative coding platform built around a Monaco edit
 
 | Layer | Technologies |
 |-------|-------------|
-| **Frontend** | React 18, Vite, React Router v6, Axios, Socket.IO Client, Monaco Editor |
+| **Frontend** | React 18, Vite, React Router v6, Axios, Socket.IO Client, Monaco Editor, custom sequence CRDT |
 | **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet |
 | **Code Execution** | Judge0 CE (RapidAPI or self-hosted) · local Node.js / Python fallback when explicitly allowed |
-| **Testing** | Backend: Jest + Supertest · Frontend: Vitest + Testing Library · E2E: planned with Playwright |
-| **Tooling** | ESLint + Prettier · GitHub Actions CI · coverage thresholds |
+| **Testing** | Backend: Jest + Supertest · Frontend: Vitest + Testing Library · CRDT convergence tests included |
+| **Tooling** | ESLint + Prettier · GitHub Actions CI · CodeQL · Dependabot · coverage thresholds |
 
 ---
 
@@ -108,15 +109,13 @@ cp backend/.env.example backend/.env
 | `PORT` | Backend port (default: `5000`) | Yes |
 | `MONGODB_URI` | MongoDB connection string | Yes |
 | `JWT_SECRET` | JWT signing secret (use a long random string) | Yes |
-| `JWT_EXPIRES_IN` | Token lifetime, e.g. `7d` | No (default: 7d) |
+| `JWT_EXPIRES_IN` | Token lifetime, e.g. `7d` | No |
 | `CLIENT_URL` | Allowed browser origin for CORS and Socket.IO | Yes |
 | `JUDGE0_BASE_URL` | Judge0 API base URL | No |
 | `JUDGE0_API_KEY` | RapidAPI or self-hosted key | No |
 | `JUDGE0_RAPIDAPI_HOST` | RapidAPI host header | No |
-| `LOG_LEVEL` | Logging level: `fatal`/`error`/`warn`/`info`/`debug` | No (default: debug) |
-| `ALLOW_LOCAL_EXECUTION` | Enable the unsandboxed local runner in production (`true` to enable) | No (default: disabled in prod) |
-
-> **Without a Judge0 key:** in development, JavaScript, TypeScript, and Python execute via the local Node.js / Python runner. Other languages require a configured Judge0 instance. In production the local runner is disabled unless `ALLOW_LOCAL_EXECUTION=true` — prefer an isolated Judge0 instance.
+| `LOG_LEVEL` | Logging level: `fatal`/`error`/`warn`/`info`/`debug` | No |
+| `ALLOW_LOCAL_EXECUTION` | Explicitly permit local execution in production | No (disabled by default) |
 
 ---
 
@@ -131,8 +130,8 @@ pairpad/
 │   │   ├── middleware/      # JWT auth, rate limiting, request id, error handler
 │   │   ├── models/          # User, Room, Message (Mongoose)
 │   │   ├── routes/          # Express route definitions
-│   │   ├── services/        # Judge0 client + local fallback runner
-│   │   ├── sockets/         # Socket.IO collaboration handler
+│   │   ├── services/        # execution + CRDT state services
+│   │   ├── sockets/         # collaboration + CRDT Socket.IO handlers
 │   │   └── utils/            # logger, asyncHandler, validation, room access, token
 │   ├── tests/               # Jest test suites
 │   └── .env.example
@@ -141,10 +140,11 @@ pairpad/
 │   │   ├── components/      # UI components
 │   │   ├── constants/       # Supported languages
 │   │   ├── context/         # AuthContext
-│   │   ├── hooks/            # Collaboration, chat, execution hooks
+│   │   ├── hooks/            # Collaboration, CRDT, chat, execution hooks
 │   │   ├── pages/            # Login, Register, Dashboard, Room
 │   │   ├── routes/           # AppRoutes + ProtectedRoute
-│   │   └── services/         # SocketService + API services
+│   │   ├── services/         # SocketService
+│   │   └── utils/            # validation/helpers + CRDT implementation
 │   └── vite.config.js
 ├── .github/workflows/        # CI and security automation
 ├── docs/
@@ -155,6 +155,32 @@ pairpad/
 ├── SECURITY.md
 └── LICENSE
 ```
+
+---
+
+## CRDT Collaboration
+
+PairPad's collaborative editor uses a small sequence CRDT rather than replacing the whole document on every keystroke. Each inserted character has a unique logical identifier and an insertion anchor; deletions are tombstones. Concurrent operations are merged as a set and rendered in deterministic order, so clients converge to the same document state regardless of operation arrival order.
+
+The server acts as the authenticated collaboration relay and persistence point:
+
+```text
+Monaco
+  │
+  ▼
+Local CRDT
+  │ replace operation
+  ▼
+Authenticated Socket.IO
+  │
+  ▼
+Server CRDT state
+  │     └── debounced MongoDB persistence
+  ├──────────────► other collaborators
+  └──────────────► CRDT sync on reconnect/join
+```
+
+The legacy full-document `code-change` event remains available for backwards compatibility with older clients, but the current Room UI waits for CRDT synchronization before enabling editing.
 
 ---
 
@@ -207,7 +233,9 @@ All connections require `handshake.auth.token` (JWT). Room membership is verifie
 |-------|---------|-------------|
 | `join-room` | `{ roomCode }` | Join a room channel |
 | `leave-room` | — | Leave the current room |
-| `code-change` | `{ content, language }` | Broadcast editor content |
+| `code-change` | `{ content, language }` | Legacy full-document synchronization |
+| `crdt-sync-request` | `{}` | Request authoritative CRDT state after joining/reconnecting |
+| `crdt-operation` | `{ opId, type, insert, deleteIds }` | Apply a mergeable collaborative edit |
 | `cursor-update` | `{ position, selection }` | Share cursor position |
 | `chat-message` | `{ content }` | Send a chat message |
 
@@ -218,7 +246,10 @@ All connections require `handshake.auth.token` (JWT). Room membership is verifie
 | `presence-update` | `{ users[] }` | Updated online-user list |
 | `user-joined` | `{ userId, name }` | A user joined |
 | `user-left` | `{ userId, name }` | A user left |
-| `code-change` | `{ content, language, userId }` | Remote editor update |
+| `code-change` | `{ content, language, userId }` | Legacy remote editor update |
+| `crdt-sync` | `{ state, version }` | Authoritative serialized CRDT state |
+| `crdt-operation` | `{ opId, type, insert, deleteIds }` | Remote collaborative edit |
+| `crdt-error` | `{ message }` | Collaborative synchronization error |
 | `cursor-update` | `{ userId, position, selection }` | Remote cursor update |
 | `chat-message` | `{ _id, content, sender, createdAt }` | New chat message |
 | `code-execution-result` | `{ result, executedBy, language }` | Execution output |
@@ -278,14 +309,14 @@ PairPad is being hardened in deliberate milestones:
 - [x] Socket authentication, membership checks, rate limits, reconnect handling
 - [x] Resource-guarded local execution with production gating
 - [x] Linting, formatting, coverage-aware tests and CI
-- [ ] CRDT-based conflict-free collaboration
+- [x] Conflict-free CRDT document synchronization
 - [ ] Remote Monaco cursor rendering
 - [ ] Role-based permissions
 - [ ] Revision history and restore
 - [ ] Rotating refresh-token sessions / hardened cookies
 - [ ] Redis-backed horizontal Socket.IO scaling
 - [ ] Isolated execution workers and Docker-based sandboxing
-- [ ] Docker Compose one-command environment
+- [x] Docker Compose one-command environment
 - [ ] Playwright end-to-end and adversarial security suites
 - [ ] OpenAPI contract + generated API reference
 - [ ] Interview mode with hidden test cases
@@ -300,7 +331,7 @@ See `docs/QUALITY_BASELINE.md` for the acceptance criteria used to judge complet
 
 1. Fork and create a feature branch from `main`.
 2. Keep changes focused; one concern per commit/PR.
-3. Add or update tests when modifying API or socket behavior.
+3. Add or update tests when modifying API, socket, or CRDT behavior.
 4. Run lint, format checks, tests and builds before opening a pull request.
 5. Open a pull request with a clear description and validation notes.
 

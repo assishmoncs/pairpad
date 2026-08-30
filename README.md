@@ -18,7 +18,7 @@ PairPad is a full-stack collaborative coding platform built around Monaco Editor
 
 | Category | What It Does |
 |---|---|
-| **Authentication** | Register, login, JWT access/refresh sessions |
+| **Authentication** | Register, login, rotating JWT access/refresh sessions, logout-all, and safer HttpOnly refresh-cookie storage |
 | **Rooms** | Create, join, leave, delete, transfer ownership, and manage member roles |
 | **Live Editing** | Monaco Editor backed by a deterministic sequence CRDT; concurrent edits converge without last-write-wins document replacement |
 | **Remote Cursors** | Throttled cursor/selection broadcasting with deterministic collaborator colors and hover names |
@@ -29,8 +29,8 @@ PairPad is a full-stack collaborative coding platform built around Monaco Editor
 | **Interview Mode** | Problem statements, candidate assignment, timer, public/hidden tests, lifecycle controls, and safe hidden-result redaction |
 | **Chat** | MongoDB-backed persistent room messaging with real-time delivery |
 | **Code Execution** | Judge0 integration plus an optional isolated execution worker |
-| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, and protected metrics |
-| **Resilience** | Socket reconnection, room rejoin, CRDT recovery, document restore propagation, and health/readiness probes |
+| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, isolated execution, and protected metrics |
+| **Resilience** | Socket reconnection, room rejoin, CRDT recovery, distributed document state, document restore propagation, and health/readiness probes |
 | **Observability** | Structured request logs, request IDs, latency counters, status counters, and Prometheus-compatible metrics |
 | **Accessibility** | Skip navigation, keyboard focus styling, reduced-motion support, semantic controls, and automated browser accessibility gates |
 
@@ -53,7 +53,7 @@ PairPad includes automated browser checks for accessible names, form labels, ima
 | Layer | Technologies |
 |---|---|
 | **Frontend** | React 18, Vite, React Router v6, Axios, Socket.IO Client, Monaco Editor |
-| **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet |
+| **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet, Redis adapter |
 | **Collaboration** | Dependency-free sequence CRDT over authenticated Socket.IO transport |
 | **Code Execution** | Judge0 CE + optional isolated execution worker |
 | **Testing** | Jest + Supertest · Vitest + Testing Library · Playwright |
@@ -106,6 +106,12 @@ Backend: `npm test` · frontend: `npm test` / `npm run test:coverage` · browser
 
 CI provisions MongoDB and Redis, runs lint/format/test/build checks, browser collaboration tests, security flows, performance budgets, and accessibility gates. Browser failures retain screenshots, traces, video, and server logs.
 
+## Release
+
+Releases use semantic version tags such as `v1.0.0`. The release workflow validates the source, builds and publishes immutable backend, frontend, and execution-worker images to GitHub Container Registry, records source provenance, and provides a smoke-test stage. See `docs/RELEASE.md` for promotion and rollback guidance.
+
+The backend lockfile currently needs regeneration in a network-enabled environment after the Redis dependencies were added; until that is done, CI intentionally uses `npm install` rather than pretending `npm ci` is reproducible.
+
 ## Quality status
 
 - [x] Repository quality baseline and security automation
@@ -124,8 +130,9 @@ CI provisions MongoDB and Redis, runs lint/format/test/build checks, browser col
 - [x] Observability baseline
 - [x] Performance budgets and load-test gates
 - [x] Automated accessibility gate
+- [x] Release and rollback runbook
 
-See `docs/RBAC.md`, `docs/system-design.md`, `docs/DEPLOYMENT.md`, `docs/ACCESSIBILITY.md`, `docs/PERFORMANCE.md`, and `docs/QUALITY_BASELINE.md`.
+See `docs/RBAC.md`, `docs/system-design.md`, `docs/DEPLOYMENT.md`, `docs/RELEASE.md`, `docs/ACCESSIBILITY.md`, `docs/PERFORMANCE.md`, and `docs/QUALITY_BASELINE.md`.
 
 ## License
 

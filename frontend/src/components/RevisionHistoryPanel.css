@@ -1,0 +1,68 @@
+.revision-history-panel {
+  flex: 0 0 auto;
+  max-height: 300px;
+  overflow: hidden;
+}
+
+.revision-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #2d2d2d;
+  border-bottom: 1px solid #404040;
+}
+
+.revision-header h3 { margin: 0; border-bottom: none; }
+
+.revision-refresh {
+  margin-right: .75rem;
+  border: 1px solid #404040;
+  background: transparent;
+  color: #9ca3af;
+  border-radius: 4px;
+  padding: .2rem .45rem;
+  cursor: pointer;
+}
+
+.revision-checkpoint {
+  display: flex;
+  gap: .4rem;
+  padding: .6rem .75rem;
+  border-bottom: 1px solid #404040;
+}
+
+.revision-checkpoint input {
+  min-width: 0;
+  flex: 1;
+  background: #1e1e1e;
+  border: 1px solid #404040;
+  color: #ddd;
+  border-radius: 4px;
+  padding: .4rem .5rem;
+  font-size: .75rem;
+}
+
+.revision-checkpoint button,
+.revision-actions button {
+  border: 1px solid #404040;
+  background: #0f766e;
+  color: #fff;
+  border-radius: 4px;
+  padding: .4rem .6rem;
+  cursor: pointer;
+  font-size: .75rem;
+}
+
+.revision-checkpoint button:disabled,
+.revision-actions button:disabled { opacity: .6; cursor: not-allowed; }
+
+.revision-error { padding: .5rem .75rem; color: #fca5a5; font-size: .75rem; background: #3a1f24; }
+.revision-list { overflow-y: auto; max-height: 205px; }
+.revision-item { border-bottom: 1px solid #353535; }
+.revision-item.selected { background: #2b2b2b; }
+.revision-main { width: 100%; border: 0; background: transparent; color: inherit; text-align: left; padding: .65rem .75rem; cursor: pointer; }
+.revision-message { display: block; color: #ddd; font-size: .8rem; font-weight: 600; }
+.revision-meta { display: block; margin-top: .2rem; color: #858585; font-size: .68rem; }
+.revision-actions { display: flex; align-items: center; justify-content: space-between; padding: 0 .75rem .65rem; color: #8f8f8f; font-size: .7rem; }
+.revision-actions button { background: transparent; color: #fca5a5; border-color: #7f1d1d; }
+.revision-empty { padding: .75rem; color: #808080; font-size: .75rem; }

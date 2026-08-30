@@ -5,13 +5,19 @@ on:
     branches: ['**']
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: pairpad-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       mongodb:
         image: mongo:7
@@ -54,6 +60,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -72,6 +79,7 @@ jobs:
 
   performance:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [backend, frontend]
     services:
       mongodb:
@@ -136,8 +144,85 @@ jobs:
           name: pairpad-performance-logs
           path: /tmp/pairpad-performance-backend.log
 
+  accessibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [backend, frontend]
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })' || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci_a11y_secret_replace_for_real_deployments
+      MONGODB_URI: mongodb://127.0.0.1:27017/pairpad_a11y
+      REDIS_URL: redis://127.0.0.1:6379
+      REDIS_REQUIRED: 'false'
+      CLIENT_URL: http://127.0.0.1:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
+      - name: Start backend
+        working-directory: backend
+        run: |
+          nohup npm start > /tmp/pairpad-a11y-backend.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:5000/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:5000/health
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Start frontend
+        working-directory: frontend
+        run: nohup npm run dev -- --host 127.0.0.1 > /tmp/pairpad-a11y-frontend.log 2>&1 &
+      - name: Run accessibility browser gate
+        working-directory: frontend
+        env:
+          PAIRPAD_BASE_URL: http://127.0.0.1:5173
+        run: npx playwright test e2e/accessibility.spec.js
+      - name: Upload accessibility artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pairpad-accessibility-artifacts
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+      - name: Upload accessibility logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pairpad-accessibility-logs
+          path: /tmp/pairpad-a11y-*.log
+
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [backend, frontend]
     services:
       mongodb:

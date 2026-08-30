@@ -38,6 +38,12 @@ export default function RoomCollaborative() {
 
   const chat = useChat({ roomCode });
   const execution = useCodeExecution({ code, language, roomCode });
+  const handleRoleUpdated = useCallback((role, userId) => {
+    if (!userId || userId === idOf(user)) {
+      setRoom((current) => current ? { ...current, currentUserRole: role } : current);
+    }
+  }, [user]);
+
   const collaboration = useCollaboration({
     room, token, roomCode, isMountedRef: mounted,
     onRemoteCode: () => {},
@@ -47,6 +53,7 @@ export default function RoomCollaborative() {
       execution.setExecutionResult(result);
       if (result.status !== 'success' && result.stderr) execution.setExecutionError(result.stderr);
     },
+    onRoleUpdated: handleRoleUpdated,
     fetchMessages: chat.fetchMessages,
   });
   const crdt = useCrdtCollaboration({ room, roomCode, enabled: true, fallbackText: code, onChange: setCode });

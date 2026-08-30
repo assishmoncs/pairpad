@@ -1,6 +1,6 @@
 # PairPad 10/10 Quality Baseline
 
-This document defines the acceptance gates for the PairPad hardening roadmap. The goal is not to maximize feature count; it is to make the existing product reliable, secure, testable, scalable, accessible, and easy to deploy.
+This document defines the acceptance gates for the PairPad hardening roadmap. The goal is not to maximize feature count; it is to make the existing product reliable, secure, testable, scalable, accessible, observable, performant, and easy to deploy.
 
 ## Engineering gates
 
@@ -91,6 +91,23 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Candidate results expose hidden pass/fail metadata without revealing hidden case contents.
 - Interview submissions use the same execution isolation and limits as normal execution.
 
+## Performance gates
+
+- API performance smoke budget: <= 250 ms p95 for `/health` and `/ready` under the default CI load profile.
+- Default API performance profile: 120 requests per endpoint, 12 concurrent requests, 0% tolerated errors.
+- Frontend production JavaScript budget: <= 2.5 MB total uncompressed JS.
+- Largest frontend JavaScript asset budget: <= 1.0 MB uncompressed.
+- Performance gates must run in CI after functional backend/frontend quality gates.
+- A budget change requires documented justification rather than silently weakening the check.
+
+## Observability gates
+
+- Every HTTP request receives a correlation/request ID.
+- Structured logs are available for production ingestion.
+- `/metrics` exposes machine-readable request metrics and is protected in production.
+- Health/readiness probes distinguish liveness from dependency readiness.
+- Performance and E2E failures retain actionable CI artifacts.
+
 ## Deployment gates
 
 - A clean environment can start the stack reproducibly.
@@ -115,4 +132,4 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 
 ## Final acceptance flow
 
-Register -> create room -> second user joins -> open workspace -> create second file -> switch files -> concurrent edit same file -> switch back -> verify isolation -> remote cursor -> chat -> run active file -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> start interview -> candidate submits -> hidden tests stay private -> pause/resume/end interview -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run E2E/security suites -> build/deploy through CI.
+Register -> create room -> second user joins -> open workspace -> create second file -> switch files -> concurrent edit same file -> switch back -> verify isolation -> remote cursor -> chat -> run active file -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> start interview -> candidate submits -> hidden tests stay private -> pause/resume/end interview -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run performance, E2E, and security suites -> build/deploy through CI.

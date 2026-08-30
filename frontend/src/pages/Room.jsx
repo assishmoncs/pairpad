@@ -133,14 +133,10 @@ const Room = () => {
       if (!isMember) {
         await axios.post(`/api/rooms/${roomCode}/join`);
         const updatedResponse = await axios.get(`/api/rooms/${roomCode}`);
-        if (isMountedRef.current) {
-          setRoom(updatedResponse.data.data.room);
-        }
+        if (isMountedRef.current) setRoom(updatedResponse.data.data.room);
       }
     } catch (err) {
-      if (isMountedRef.current) {
-        setError(getErrorMessage(err, 'Failed to load room.'));
-      }
+      if (isMountedRef.current) setError(getErrorMessage(err, 'Failed to load room.'));
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
@@ -162,39 +158,23 @@ const Room = () => {
 
   const handleCodeChange = useCallback(
     async (value) => {
+      if (!crdt.crdtReady) {
+        // CRDT state must be authoritative before editing is permitted.
+        return;
+      }
+
       setCode(value);
-
-      if (crdt.crdtReady) {
-        setIsSaving(true);
-        try {
-          await crdt.handleLocalChange(value);
-          setSyncError(crdt.crdtError || '');
-        } catch (err) {
-          setSyncError(err.message || 'Failed to synchronize your changes.');
-        } finally {
-          setIsSaving(false);
-        }
-        return;
-      }
-
-      // Safe fallback during CRDT initialization. Once the CRDT is ready,
-      // normal edits never use the legacy last-write-wins path.
-      if (collaboration.isRemoteChangeRef.current) {
-        collaboration.isRemoteChangeRef.current = false;
-        return;
-      }
-
       setIsSaving(true);
       try {
-        await socketService.sendCodeChange(value, language);
-        setSyncError('');
+        await crdt.handleLocalChange(value);
+        setSyncError(crdt.crdtError || '');
       } catch (err) {
-        setSyncError(err.message || 'Failed to sync your changes.');
+        setSyncError(err.message || 'Failed to synchronize your changes.');
       } finally {
         setIsSaving(false);
       }
     },
-    [crdt, collaboration, language]
+    [crdt]
   );
 
   useEffect(() => {
@@ -320,11 +300,11 @@ const Room = () => {
                 aria-label="Select Editor Language"
               />
             </div>
-            {crdt.crdtReady ? (
-              <span className="saving-indicator" aria-live="polite">CRDT Sync</span>
-            ) : isSaving ? (
-              <span className="saving-indicator" aria-live="polite">Syncing...</span>
-            ) : null}
+            {!crdt.crdtReady && !crdt.crdtError && (
+              <span className="saving-indicator" aria-live="polite">Initializing collaborative editor…</span>
+            )}
+            {crdt.crdtReady && <span className="saving-indicator" aria-live="polite">CRDT Sync</span>}
+            {isSaving && <span className="saving-indicator" aria-live="polite">Syncing...</span>}
             {syncError && <span className="error-text" aria-live="polite">{syncError}</span>}
             <button onClick={handleRunCode} disabled={executing} className="btn-run" aria-label="Run Code">
               {executing ? 'Running...' : 'Run Code'}
@@ -344,6 +324,7 @@ const Room = () => {
               fontSize: 14,
               automaticLayout: true,
               scrollBeyondLastLine: false,
+              readOnly: !crdt.crdtReady,
             }}
           />
         </div>

@@ -10,6 +10,7 @@ import ChatPanel from '../components/ChatPanel';
 import ExecutionPanel from '../components/ExecutionPanel';
 import LanguageSelect from '../components/LanguageSelect';
 import RoomMembersPanel from '../components/RoomMembersPanel';
+import RevisionHistoryPanel from '../components/RevisionHistoryPanel';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCrdtCollaboration } from '../hooks/useCrdtCollaboration';
 import { useChat } from '../hooks/useChat';
@@ -56,7 +57,18 @@ export default function RoomCollaborative() {
     onRoleUpdated: handleRoleUpdated,
     fetchMessages: chat.fetchMessages,
   });
-  const crdt = useCrdtCollaboration({ room, roomCode, enabled: true, fallbackText: code, onChange: setCode });
+
+  const crdt = useCrdtCollaboration({
+    room,
+    roomCode,
+    enabled: true,
+    fallbackText: code,
+    onChange: setCode,
+    onDocumentRestored: ({ language: restoredLanguage }) => {
+      if (restoredLanguage) setLanguage(restoredLanguage);
+    },
+  });
+
   useRemoteCursors(editor, collaboration.remoteCursors);
 
   useEffect(() => () => {
@@ -193,6 +205,7 @@ export default function RoomCollaborative() {
           </ul>
         </div>
         <RoomMembersPanel room={room} currentUserId={idOf(user)} onRoomUpdated={setRoom} />
+        <RevisionHistoryPanel roomCode={roomCode} code={code} language={language} currentRole={currentRole} />
         <ExecutionPanel executionResult={execution.executionResult} executionError={execution.executionError} showStdin={execution.showStdin} setShowStdin={execution.setShowStdin} stdin={execution.stdin} setStdin={execution.setStdin} />
         <ChatPanel messages={chat.messages} messagesError={chat.messagesError} newMessage={chat.newMessage} setNewMessage={chat.setNewMessage} sendingMessage={chat.sendingMessage} connected={collaboration.connected} handleSendMessage={chat.handleSendMessage} messagesEndRef={chat.messagesEndRef} />
       </aside>

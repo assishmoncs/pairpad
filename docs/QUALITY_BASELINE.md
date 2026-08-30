@@ -10,7 +10,7 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Production builds: successful on a clean checkout.
 - No committed secrets or generated credentials.
 - No critical/high dependency vulnerabilities without a documented exception.
-- REST surface is represented by an authoritative OpenAPI 3.1 contract.
+- REST surface is represented by the single authoritative OpenAPI 3.1 contract in `docs/openapi.yaml`.
 
 ## Test gates
 
@@ -73,10 +73,9 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 
 ## API gates
 
-- OpenAPI 3.1 contract is checked into `docs/openapi.yaml`.
+- OpenAPI 3.1 contract is checked into `docs/openapi.yaml` and includes authentication, rooms, history, workspace, interview, messages, execution, and health endpoints.
 - Runtime contract is available at `/api/openapi.yaml`.
 - Human-readable API landing page is available at `/api/docs`.
-- Workspace and Interview endpoint details have checked-in API fragments until consolidated into the main contract.
 - Endpoint changes update implementation and contract documentation in the same change.
 - The OpenAPI document is documentation; server-side validation and authorization remain authoritative.
 
@@ -121,13 +120,18 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - `prefers-reduced-motion` is respected.
 - Manual WCAG 2.2 AA review is required for screen readers, contrast, zoom/reflow, and the Monaco editing surface before production release.
 
-## Deployment gates
+## Deployment and release gates
 
 - A clean environment can start the stack reproducibly.
 - Docker images build without manual source changes.
 - Health and readiness probes are available.
 - Production configuration is documented.
-- Failed deployments can be detected and rolled back.
+- Release images are published from immutable Git tags.
+- Backend, frontend, and execution-worker images are reproducibly built and tagged together.
+- Release promotion is separated from pull-request validation.
+- Failed deployments can be detected and rolled back to a previous immutable image tag.
+- Release notes identify the source commit and verification state.
+- Production release requires green quality, performance, accessibility, security, and E2E gates.
 
 ## Product and UX gates
 
@@ -145,4 +149,4 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 
 ## Final acceptance flow
 
-Register -> create room -> second user joins -> open workspace -> create second file -> switch files -> concurrent edit same file -> switch back -> verify isolation -> remote cursor -> chat -> run active file -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> start interview -> candidate submits -> hidden tests stay private -> pause/resume/end interview -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run performance, accessibility, E2E, and security suites -> build/deploy through CI.
+Register -> create room -> second user joins -> open workspace -> create second file -> switch files -> concurrent edit same file -> switch back -> verify isolation -> remote cursor -> chat -> run active file -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> start interview -> candidate submits -> hidden tests stay private -> pause/resume/end interview -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run performance, accessibility, E2E, and security suites -> build release images -> promote/deploy -> smoke-test health/readiness -> confirm rollback path.

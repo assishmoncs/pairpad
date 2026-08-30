@@ -3,7 +3,7 @@ const Room = require('../models/Room');
 const logger = require('../utils/logger');
 const { getUserFromToken } = require('../utils/tokenAuth');
 const { findRoomByCode, isRoomParticipant, normalizeRoomCode, getRoomRole } = require('../utils/roomAccess');
-const { ROLES, canEdit } = require('../utils/roomPermissions');
+const { canEdit } = require('../utils/roomPermissions');
 
 const roomPresence = new Map();
 const MAX_CODE_SIZE = 512 * 1024;
@@ -53,29 +53,21 @@ const getRoomPresence = (roomCode) => {
   return roomPresence.get(roomCode);
 };
 const broadcastPresence = (io, roomCode) => {
-  io.to(`room:${roomCode}`).emit('presence-update', {
-    users: Array.from(getRoomPresence(roomCode).values()),
-  });
+  io.to(`room:${roomCode}`).emit('presence-update', { users: Array.from(getRoomPresence(roomCode).values()) });
 };
 
 function flushSnapshot(socketId) {
   const entry = snapshotTimers.get(socketId);
   if (!entry) return;
   snapshotTimers.delete(socketId);
-  Room.updateOne(
-    { roomCode: entry.roomCode },
-    { $set: { snapshotCode: entry.content } }
-  ).catch((err) => logger.error('Failed to persist legacy snapshot', { message: err.message }));
+  Room.updateOne({ roomCode: entry.roomCode }, { $set: { snapshotCode: entry.content } })
+    .catch((err) => logger.error('Failed to persist legacy snapshot', { message: err.message }));
 }
 
 function scheduleSnapshot(socket, roomCode, content) {
   const previous = snapshotTimers.get(socket.id);
   if (previous) clearTimeout(previous.timer);
-  snapshotTimers.set(socket.id, {
-    roomCode,
-    content,
-    timer: setTimeout(() => flushSnapshot(socket.id), SNAPSHOT_DEBOUNCE_MS),
-  });
+  snapshotTimers.set(socket.id, { roomCode, content, timer: setTimeout(() => flushSnapshot(socket.id), SNAPSHOT_DEBOUNCE_MS) });
 }
 
 const handleLeaveRoom = (io, socket) => {
@@ -93,7 +85,6 @@ const handleLeaveRoom = (io, socket) => {
 
 const initializeSocket = (io) => {
   io.use(enforceConnectionLimit);
-
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) return next(new Error('Authentication required.'));
@@ -148,11 +139,8 @@ const initializeSocket = (io) => {
         const { content, language } = data || {};
         if (typeof content !== 'string') return callback?.({ error: 'Content is required.' });
         if (content.length > MAX_CODE_SIZE) return callback?.({ error: 'Code payload exceeds the maximum size.' });
-
         scheduleSnapshot(socket, socket.currentRoom, content);
-        socket.to(`room:${socket.currentRoom}`).emit('code-change', {
-          content, language, userId: socket.user._id.toString(), userName: socket.user.name,
-        });
+        socket.to(`room:${socket.currentRoom}`).emit('code-change', { content, language, userId: socket.user._id.toString(), userName: socket.user.name });
         callback?.({ success: true });
       } catch (error) {
         logger.error('Error applying code change', { message: error.message });
@@ -166,9 +154,7 @@ const initializeSocket = (io) => {
       if (!room || !isRoomParticipant(room, socket.user._id)) return;
       const position = data?.position;
       if (!Number.isInteger(position?.line) || !Number.isInteger(position?.column) || position.line < 1 || position.column < 1) return;
-      socket.to(`room:${socket.currentRoom}`).emit('cursor-update', {
-        userId: socket.user._id.toString(), userName: socket.user.name, position, selection: data?.selection || null,
-      });
+      socket.to(`room:${socket.currentRoom}`).emit('cursor-update', { userId: socket.user._id.toString(), userName: socket.user.name, position, selection: data?.selection || null });
     });
 
     socket.on('chat-message', async (data, callback) => {
@@ -179,14 +165,9 @@ const initializeSocket = (io) => {
         if (!room || !isRoomParticipant(room, socket.user._id)) return callback?.({ error: 'Room membership required.' });
         const content = typeof data?.content === 'string' ? data.content.trim().slice(0, 1000) : '';
         if (!content) return callback?.({ error: 'Message content is required.' });
-
         const message = await Message.create({ room: room._id, sender: socket.user._id, content });
         const populated = await Message.findById(message._id).populate('sender', 'name email');
-        const payload = {
-          _id: populated._id.toString(), content: populated.content,
-          sender: { _id: populated.sender._id.toString(), name: populated.sender.name, email: populated.sender.email || '' },
-          createdAt: populated.createdAt,
-        };
+        const payload = { _id: populated._id.toString(), content: populated.content, sender: { _id: populated.sender._id.toString(), name: populated.sender.name, email: populated.sender.email || '' }, createdAt: populated.createdAt };
         io.to(`room:${socket.currentRoom}`).emit('chat-message', payload);
         callback?.({ success: true, message: payload });
       } catch (error) {

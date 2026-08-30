@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: PairPad API
-  version: 1.0.0
-  description: Authoritative REST contract for PairPad collaborative coding.
+  version: 1.1.0
+  description: Authoritative REST contract for PairPad collaborative coding, workspaces, revisions, interviews, and execution.
 servers:
   - url: http://localhost:5000
     description: Local development
@@ -14,6 +14,8 @@ tags:
   - { name: Authentication }
   - { name: Rooms }
   - { name: History }
+  - { name: Workspace }
+  - { name: Interview }
   - { name: Messages }
   - { name: Execution }
   - { name: Health }
@@ -22,7 +24,8 @@ paths:
     get:
       tags: [Health]
       security: []
-      responses: { '200': { description: Liveness check } }
+      responses:
+        '200': { description: Liveness check }
   /ready:
     get:
       tags: [Health]
@@ -167,6 +170,124 @@ paths:
       responses:
         '200': { description: Revision restored }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/files:
+    get:
+      tags: [Workspace]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { description: Workspace file list }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Workspace]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWorkspaceFileRequest' }
+      responses:
+        '201': { description: Workspace file created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/files/{fileId}:
+    get:
+      tags: [Workspace]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { $ref: '#/components/parameters/FileId' }
+      responses:
+        '200': { description: Workspace file }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Workspace]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { $ref: '#/components/parameters/FileId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenameWorkspaceFileRequest' }
+      responses:
+        '200': { description: Workspace file renamed }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Workspace]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { $ref: '#/components/parameters/FileId' }
+      responses:
+        '200': { description: Workspace file deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/interview:
+    get:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { description: Member-safe interview state }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InterviewConfig' }
+      responses:
+        '200': { description: Interview configured }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/interview/start:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { description: Interview started }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/interview/pause:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { description: Interview paused }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/interview/resume:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { description: Interview resumed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/interview/end:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { description: Interview ended }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/interview/submit:
+    post:
+      tags: [Interview]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceCode, language]
+              properties:
+                sourceCode: { type: string, maxLength: 51200 }
+                language: { type: string }
+      responses:
+        '200': { description: Public results plus redacted hidden-test results }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/messages/room/{roomCode}:
     get:
       tags: [Messages]
@@ -179,7 +300,11 @@ paths:
   /api/execute:
     post:
       tags: [Execution]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ExecuteRequest' } } } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExecuteRequest' }
       responses:
         '200': { description: Execution result }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -192,6 +317,7 @@ components:
   parameters:
     RoomCode: { name: roomCode, in: path, required: true, schema: { type: string, pattern: '^[A-Z0-9]{6}$' } }
     Identifier: { name: identifier, in: path, required: true, schema: { type: string } }
+    FileId: { name: fileId, in: path, required: true, schema: { type: string } }
   schemas:
     User:
       type: object
@@ -236,6 +362,36 @@ components:
         content: { type: string, maxLength: 524288 }
         language: { type: string }
         message: { type: string, maxLength: 120 }
+    CreateWorkspaceFileRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 240 }
+        language: { type: string }
+        content: { type: string, maxLength: 524288 }
+    RenameWorkspaceFileRequest:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 240 }
+    InterviewTest:
+      type: object
+      required: [name, stdin, expectedOutput]
+      properties:
+        name: { type: string, maxLength: 100 }
+        stdin: { type: string, maxLength: 10000 }
+        expectedOutput: { type: string, maxLength: 10000 }
+    InterviewConfig:
+      type: object
+      required: [title, description, durationMinutes, language]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, minLength: 1, maxLength: 5000 }
+        durationMinutes: { type: integer, minimum: 1, maximum: 1440 }
+        language: { type: string, enum: [javascript, python, java, cpp, c, go, rust, typescript, php, ruby] }
+        candidateId: { type: [string, 'null'] }
+        publicTests: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/InterviewTest' } }
+        hiddenTests: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/InterviewTest' } }
     ExecuteRequest:
       type: object
       required: [source_code, language, roomCode]
@@ -244,21 +400,41 @@ components:
         language: { type: string }
         stdin: { type: string, maxLength: 10000 }
         roomCode: { type: string, pattern: '^[A-Z0-9]{6}$' }
+        fileId: { type: string }
     ApiError:
       type: object
       properties:
-        success: { type: boolean, const: false }
-        error:
-          type: object
-          properties:
-            message: { type: string }
-            requestId: { type: string }
+        status: { type: string }
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string }
+    AuthSuccess:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        token: { type: string }
+    RefreshSuccess:
+      type: object
+      properties:
+        token: { type: string }
+    UserSuccess:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+    RoomSuccess:
+      type: object
+      properties:
+        room: { type: object }
+    RoomsSuccess:
+      type: object
+      properties:
+        rooms: { type: array, items: { type: object } }
   responses:
-    AuthSuccess: { description: Authenticated session created, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/User' }, token: { type: string } } } } } }
-    RefreshSuccess: { description: New access token; refresh token rotates in HttpOnly cookie, content: { application/json: { schema: { type: object, properties: { token: { type: string } } } } } }
-    UserSuccess: { description: Current user, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/User' } } } } } }
-    RoomSuccess: { description: Room payload, content: { application/json: { schema: { type: object, properties: { room: { type: object } } } } } }
-    RoomsSuccess: { description: Room list, content: { application/json: { schema: { type: object, properties: { rooms: { type: array, items: { type: object } } } } } } }
+    AuthSuccess: { description: Authenticated session created, content: { application/json: { schema: { $ref: '#/components/schemas/AuthSuccess' } } } }
+    RefreshSuccess: { description: New access token; refresh token rotates in HttpOnly cookie, content: { application/json: { schema: { $ref: '#/components/schemas/RefreshSuccess' } } } }
+    UserSuccess: { description: Current user, content: { application/json: { schema: { $ref: '#/components/schemas/UserSuccess' } } } }
+    RoomSuccess: { description: Room payload, content: { application/json: { schema: { $ref: '#/components/schemas/RoomSuccess' } } } }
+    RoomsSuccess: { description: Room list, content: { application/json: { schema: { $ref: '#/components/schemas/RoomsSuccess' } } } }
     BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
     Unauthorized: { description: Authentication required or invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
     Forbidden: { description: Insufficient permission, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }

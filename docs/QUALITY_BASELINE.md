@@ -25,6 +25,7 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Browser E2E covers two independent sessions sharing a room and editing the same workspace file.
 - Browser E2E failures retain screenshots, video and traces in CI.
 - Reconnect, concurrent editing, authorization, revision restore, room lifecycle, workspace switching, and interview lifecycle cases covered.
+- Automated browser accessibility gates cover public pages, accessible names, form labels, image alternatives, tab order, and visible keyboard focus.
 
 ## Security gates
 
@@ -108,6 +109,18 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Health/readiness probes distinguish liveness from dependency readiness.
 - Performance and E2E failures retain actionable CI artifacts.
 
+## Accessibility gates
+
+- Public pages pass the automated Playwright accessibility checks.
+- Interactive controls expose accessible names.
+- Form fields have explicit or programmatic labels.
+- Images provide alternative text when rendered.
+- Positive `tabindex` values are prohibited.
+- Primary controls expose visible keyboard focus.
+- Skip navigation is available and route changes move focus to main content.
+- `prefers-reduced-motion` is respected.
+- Manual WCAG 2.2 AA review is required for screen readers, contrast, zoom/reflow, and the Monaco editing surface before production release.
+
 ## Deployment gates
 
 - A clean environment can start the stack reproducibly.
@@ -132,4 +145,4 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 
 ## Final acceptance flow
 
-Register -> create room -> second user joins -> open workspace -> create second file -> switch files -> concurrent edit same file -> switch back -> verify isolation -> remote cursor -> chat -> run active file -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> start interview -> candidate submits -> hidden tests stay private -> pause/resume/end interview -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run performance, E2E, and security suites -> build/deploy through CI.
+Register -> create room -> second user joins -> open workspace -> create second file -> switch files -> concurrent edit same file -> switch back -> verify isolation -> remote cursor -> chat -> run active file -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> start interview -> candidate submits -> hidden tests stay private -> pause/resume/end interview -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run performance, accessibility, E2E, and security suites -> build/deploy through CI.

@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import socketService from '../services/socketService';
-import { cursorColorForUser } from '../utils/cursor';
+import { cursorColorForUser, cursorColorKeyForUser } from '../utils/cursor';
 
-/**
- * Owns the Socket.IO collaboration lifecycle for a room: connection,
- * auto-reconnect, room join/rejoin, presence, CRDT-backed code sync, cursors,
- * chat, and execution broadcast forwarding.
- */
 export const useCollaboration = ({
   room,
   token,
@@ -28,9 +23,7 @@ export const useCollaboration = ({
   const isRemoteChangeRef = useRef(false);
   const lastRemoteCodeRef = useRef(null);
 
-  const clearRemoteCursors = useCallback(() => {
-    setRemoteCursors({});
-  }, []);
+  const clearRemoteCursors = useCallback(() => setRemoteCursors({}), []);
 
   const cleanupListeners = useCallback(() => {
     if (socketCleanupRef.current) {
@@ -56,14 +49,10 @@ export const useCollaboration = ({
       if (currentRoom) {
         try {
           const joinResponse = await socketService.joinRoom(currentRoom);
-          if (isMountedRef.current && joinResponse.users) {
-            setOnlineUsers(joinResponse.users);
-          }
+          if (isMountedRef.current && joinResponse.users) setOnlineUsers(joinResponse.users);
         } catch (err) {
           console.error('[Room] Failed to rejoin room on reconnect:', err.message);
-          if (isMountedRef.current) {
-            setSocketError('Reconnected, but could not rejoin room: ' + err.message);
-          }
+          if (isMountedRef.current) setSocketError('Reconnected, but could not rejoin room: ' + err.message);
         }
       }
     });
@@ -113,26 +102,23 @@ export const useCollaboration = ({
           position: payload.position,
           selection: payload.selection || null,
           color: cursorColorForUser(userId),
+          colorKey: cursorColorKeyForUser(userId),
         },
       }));
     });
 
-    const unsubCodeChange = socketService.on(
-      'code-change',
-      ({ content, language: nextLanguage }) => {
-        if (!isMountedRef.current) return;
-        isRemoteChangeRef.current = true;
-        lastRemoteCodeRef.current = content;
-        onRemoteCode({ content, language: nextLanguage });
-        setTimeout(() => {
-          isRemoteChangeRef.current = false;
-        }, 50);
-      }
-    );
+    const unsubCodeChange = socketService.on('code-change', ({ content, language: nextLanguage }) => {
+      if (!isMountedRef.current) return;
+      isRemoteChangeRef.current = true;
+      lastRemoteCodeRef.current = content;
+      onRemoteCode({ content, language: nextLanguage });
+      setTimeout(() => {
+        isRemoteChangeRef.current = false;
+      }, 50);
+    });
 
     const unsubChatMessage = socketService.on('chat-message', onChatIncoming);
     const unsubExecutionResult = socketService.on('code-execution-result', onExecutionResult);
-
     const unsubRoomDeleted = socketService.on('room-deleted', () => {
       if (!isMountedRef.current) return;
       setSocketError('This room was deleted. Returning to dashboard…');
@@ -155,19 +141,14 @@ export const useCollaboration = ({
     try {
       socketService.connect(token);
       await socketService.waitForConnection();
-
       if (!isMountedRef.current) return;
       setConnected(true);
 
       try {
         const joinResponse = await socketService.joinRoom(roomCode);
-        if (isMountedRef.current && joinResponse.users) {
-          setOnlineUsers(joinResponse.users);
-        }
+        if (isMountedRef.current && joinResponse.users) setOnlineUsers(joinResponse.users);
       } catch (joinError) {
-        if (isMountedRef.current) {
-          setSocketError('Failed to join room: ' + joinError.message);
-        }
+        if (isMountedRef.current) setSocketError('Failed to join room: ' + joinError.message);
       }
 
       await fetchMessages();
@@ -194,7 +175,6 @@ export const useCollaboration = ({
   useEffect(() => {
     if (!room || !token) return;
     connectToSocket();
-
     return () => {
       cleanupListeners();
       socketService.leaveRoom();

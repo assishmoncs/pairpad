@@ -58,6 +58,10 @@ describeWithMongo('API security and failure flows', () => {
 
     await request(app).post(`/api/rooms/${roomCode}/join`).set('Authorization', `Bearer ${editorToken}`);
     await request(app).post(`/api/rooms/${roomCode}/join`).set('Authorization', `Bearer ${viewerToken}`);
+    await request(app)
+      .patch(`/api/rooms/${roomCode}/members/${viewerId}/role`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ role: 'viewer' });
   });
 
   afterAll(async () => {

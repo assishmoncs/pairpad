@@ -10,7 +10,8 @@
     "test:unit": "jest --coverage --testPathIgnorePatterns tests/auth.test.js",
     "test:watch": "jest --watch",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "perf": "node scripts/performance-budget.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

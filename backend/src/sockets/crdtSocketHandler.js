@@ -27,6 +27,19 @@ const getDocument = async (roomCode) => {
   return document;
 };
 
+const replaceDocumentState = (roomCode, content) => {
+  const normalized = normalizeRoomCode(roomCode);
+  if (!normalized || typeof content !== 'string') return null;
+  const nodes = createInitialState(content);
+  if (Buffer.byteLength(serializeState(nodes), 'utf8') > MAX_STATE_BYTES) return null;
+  documents.set(normalized, { nodes });
+  const timer = saveTimers.get(normalized);
+  if (timer) clearTimeout(timer);
+  saveTimers.delete(normalized);
+  latestEditors.delete(normalized);
+  return serializeState(nodes);
+};
+
 const persistRoom = async (roomCode, authorId) => {
   const document = documents.get(roomCode);
   if (!document) return;
@@ -66,12 +79,6 @@ const schedulePersist = (roomCode, authorId) => {
       logger.error('Failed to persist CRDT state', { roomCode, message: error.message });
     }
   }, SAVE_DEBOUNCE_MS));
-};
-
-const isMember = async (socket) => {
-  if (!socket.currentRoom || !socket.user?._id) return false;
-  const room = await findRoomByCode(socket.currentRoom);
-  return Boolean(room && isRoomParticipant(room, socket.user._id));
 };
 
 const getAuthorizedRoom = async (socket, requireEdit = false) => {
@@ -140,4 +147,4 @@ const initializeCrdtSocket = (io) => {
   });
 };
 
-module.exports = { initializeCrdtSocket };
+module.exports = { initializeCrdtSocket, replaceDocumentState };

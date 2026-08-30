@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const Room = require('../models/Room');
 const { getRoomRole } = require('../utils/roomAccess');
 const { ROLES } = require('../utils/roomPermissions');
 const executionService = require('./executionService');
@@ -64,18 +63,25 @@ const validateConfig = (payload = {}) => {
   };
 };
 
-const createOrUpdateInterview = async (room, payload) => {
-  const role = getRoomRole(room, room.owner);
-  if (role !== ROLES.OWNER) throw Object.assign(new Error('Only the room owner can configure interview mode.'), { code: 'FORBIDDEN' });
+const requireOwner = (room, userId) => {
+  if (getRoomRole(room, userId) !== ROLES.OWNER) {
+    throw Object.assign(new Error('Only the room owner can manage interview mode.'), { code: 'FORBIDDEN' });
+  }
+};
+
+const createOrUpdateInterview = async (room, userId, payload) => {
+  requireOwner(room, userId);
   if (room.interview?.status === 'running' || room.interview?.status === 'paused') {
     throw Object.assign(new Error('Stop the active interview before editing its configuration.'), { code: 'INTERVIEW_ACTIVE' });
   }
-  room.interview = { ...validateConfig(payload), status: 'draft', startedAt: null, pausedAt: null, endedAt: null, remainingSeconds: payload.durationMinutes * 60, candidateId: payload.candidateId || null };
+  const config = validateConfig(payload);
+  room.interview = { ...config, status: 'draft', startedAt: null, pausedAt: null, endedAt: null, remainingSeconds: config.durationMinutes * 60, candidateId: payload.candidateId || null };
   await room.save();
   return room.interview;
 };
 
-const startInterview = async (room) => {
+const startInterview = async (room, userId) => {
+  requireOwner(room, userId);
   if (room.interview?.status !== 'draft') throw Object.assign(new Error('Interview must be in draft state before starting.'), { code: 'INVALID_STATE' });
   room.interview.status = 'running';
   room.interview.startedAt = new Date();
@@ -86,7 +92,8 @@ const startInterview = async (room) => {
   return room.interview;
 };
 
-const pauseInterview = async (room) => {
+const pauseInterview = async (room, userId) => {
+  requireOwner(room, userId);
   if (room.interview?.status !== 'running') throw Object.assign(new Error('Only a running interview can be paused.'), { code: 'INVALID_STATE' });
   const elapsed = Math.floor((Date.now() - new Date(room.interview.startedAt).getTime()) / 1000);
   room.interview.remainingSeconds = Math.max(0, room.interview.remainingSeconds - elapsed);
@@ -97,7 +104,8 @@ const pauseInterview = async (room) => {
   return room.interview;
 };
 
-const resumeInterview = async (room) => {
+const resumeInterview = async (room, userId) => {
+  requireOwner(room, userId);
   if (room.interview?.status !== 'paused') throw Object.assign(new Error('Only a paused interview can be resumed.'), { code: 'INVALID_STATE' });
   room.interview.status = 'running';
   room.interview.startedAt = new Date();
@@ -106,7 +114,8 @@ const resumeInterview = async (room) => {
   return room.interview;
 };
 
-const endInterview = async (room) => {
+const endInterview = async (room, userId) => {
+  requireOwner(room, userId);
   if (!['running', 'paused'].includes(room.interview?.status)) throw Object.assign(new Error('Only an active interview can be ended.'), { code: 'INVALID_STATE' });
   room.interview.status = 'ended';
   room.interview.endedAt = new Date();
@@ -114,10 +123,9 @@ const endInterview = async (room) => {
   return room.interview;
 };
 
-const runTests = async (room, sourceCode, language, tests, includeExpected = false) => {
+const runTests = async (sourceCode, language, tests, includeExpected = false) => {
   const results = [];
   for (const test of tests) {
-    // Sequential execution avoids amplifying untrusted-code concurrency.
     const result = await executionService.executeCode(sourceCode, language, test.stdin || '');
     const actual = (result.stdout || '').trim();
     const expected = (test.expectedOutput || '').trim();
@@ -135,17 +143,20 @@ const runTests = async (room, sourceCode, language, tests, includeExpected = fal
   return results;
 };
 
-const submitCandidate = async (room, sourceCode, language) => {
+const submitCandidate = async (room, userId, sourceCode, language) => {
   if (!room.interview || room.interview.status !== 'running') throw Object.assign(new Error('Interview is not currently running.'), { code: 'INVALID_STATE' });
-  const role = getRoomRole(room, room.owner);
-  if (role !== ROLES.EDITOR && role !== ROLES.VIEWER && role !== ROLES.OWNER) {
-    throw Object.assign(new Error('You are not authorized to submit.'), { code: 'FORBIDDEN' });
+  const role = getRoomRole(room, userId);
+  if (![ROLES.EDITOR, ROLES.VIEWER, ROLES.OWNER].includes(role)) throw Object.assign(new Error('You are not authorized to submit.'), { code: 'FORBIDDEN' });
+  if (room.interview.candidateId && room.interview.candidateId.toString() !== userId.toString() && role !== ROLES.OWNER) {
+    throw Object.assign(new Error('This interview is assigned to a different candidate.'), { code: 'FORBIDDEN' });
   }
-  const publicResults = await runTests(room, sourceCode, language, room.interview.publicTests, true);
-  const hiddenResults = await runTests(room, sourceCode, language, room.interview.hiddenTests, false);
+  if (language.toLowerCase() !== room.interview.language.toLowerCase()) throw Object.assign(new Error('Submission language must match the interview language.'), { code: 'INVALID_INTERVIEW' });
+  const publicResults = await runTests(sourceCode, language, room.interview.publicTests, true);
+  const hiddenResults = await runTests(sourceCode, language, room.interview.hiddenTests, false);
   return {
     publicResults,
     hiddenResults,
+    hiddenPassed: hiddenResults.filter((entry) => entry.passed).length,
     score: [...publicResults, ...hiddenResults].filter((entry) => entry.passed).length,
     total: publicResults.length + hiddenResults.length,
   };

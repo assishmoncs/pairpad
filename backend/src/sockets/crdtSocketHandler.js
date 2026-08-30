@@ -1,8 +1,10 @@
 const Room = require('../models/Room');
 const logger = require('../utils/logger');
+const Revision = require('../models/Revision');
 const { findRoomByCode, isRoomParticipant, normalizeRoomCode, getRoomRole } = require('../utils/roomAccess');
 const { ROLES, canEdit, getMemberRole } = require('../utils/roomPermissions');
 const { createInitialState, deserializeState, serializeState, visibleText, applyReplaceOperation } = require('../services/textCrdt');
+const { shouldCreateAutomaticRevision } = require('../services/revisionService');
 
 const MAX_OPERATION_BYTES = 256 * 1024;
 const MAX_STATE_BYTES = 4 * 1024 * 1024;
@@ -12,6 +14,7 @@ const MAX_OPS_PER_WINDOW = 600;
 
 const documents = new Map();
 const saveTimers = new Map();
+const latestEditors = new Map();
 
 const getDocument = async (roomCode) => {
   const normalized = normalizeRoomCode(roomCode);
@@ -24,20 +27,41 @@ const getDocument = async (roomCode) => {
   return document;
 };
 
-const schedulePersist = (roomCode) => {
+const persistRoom = async (roomCode, authorId) => {
+  const document = documents.get(roomCode);
+  if (!document) return;
+  const serialized = serializeState(document.nodes);
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_STATE_BYTES) {
+    logger.error('CRDT state exceeded maximum persistence size', { roomCode });
+    return;
+  }
+
+  const content = visibleText(document.nodes);
+  await Room.updateOne({ roomCode }, { $set: { crdtState: serialized, snapshotCode: content } });
+
+  if (authorId && shouldCreateAutomaticRevision(roomCode)) {
+    const room = await findRoomByCode(roomCode);
+    if (room && content.length <= 524288) {
+      await Revision.create({
+        room: room._id,
+        author: authorId,
+        content,
+        language: room.language,
+        message: 'Automatic checkpoint',
+        source: 'automatic',
+      });
+    }
+  }
+};
+
+const schedulePersist = (roomCode, authorId) => {
   const timer = saveTimers.get(roomCode);
   if (timer) clearTimeout(timer);
+  latestEditors.set(roomCode, authorId);
   saveTimers.set(roomCode, setTimeout(async () => {
     saveTimers.delete(roomCode);
-    const document = documents.get(roomCode);
-    if (!document) return;
     try {
-      const serialized = serializeState(document.nodes);
-      if (Buffer.byteLength(serialized, 'utf8') > MAX_STATE_BYTES) {
-        logger.error('CRDT state exceeded maximum persistence size', { roomCode });
-        return;
-      }
-      await Room.updateOne({ roomCode }, { $set: { crdtState: serialized, snapshotCode: visibleText(document.nodes) } });
+      await persistRoom(roomCode, latestEditors.get(roomCode));
     } catch (error) {
       logger.error('Failed to persist CRDT state', { roomCode, message: error.message });
     }
@@ -78,8 +102,9 @@ const initializeCrdtSocket = (io) => {
         if (!document) return callback?.({ error: 'Room not found.' });
         const state = serializeState(document.nodes);
         if (Buffer.byteLength(state, 'utf8') > MAX_STATE_BYTES) return callback?.({ error: 'Collaborative document is too large to synchronize.' });
-        socket.emit('crdt-sync', { state, version: 1, role: getRoomRole(room, socket.user._id) });
-        callback?.({ success: true, role: getRoomRole(room, socket.user._id) });
+        const role = getRoomRole(room, socket.user._id);
+        socket.emit('crdt-sync', { state, version: 1, role });
+        callback?.({ success: true, role });
       } catch (error) {
         logger.error('CRDT sync request failed', { message: error.message });
         callback?.({ error: 'Failed to synchronize collaborative document.' });
@@ -99,7 +124,7 @@ const initializeCrdtSocket = (io) => {
         if (!document) return callback?.({ error: 'Room not found.' });
         const changed = applyReplaceOperation(document.nodes, operation);
         if (changed) {
-          schedulePersist(socket.currentRoom);
+          schedulePersist(socket.currentRoom, socket.user._id);
           socket.to(`room:${socket.currentRoom}`).emit('crdt-operation', operation);
         }
         callback?.({ success: true, changed, textLength: visibleText(document.nodes).length });
@@ -107,6 +132,10 @@ const initializeCrdtSocket = (io) => {
         logger.error('CRDT operation failed', { message: error.message });
         callback?.({ error: 'Failed to apply collaborative edit.' });
       }
+    });
+
+    socket.on('disconnect', () => {
+      if (socket.currentRoom) latestEditors.delete(socket.currentRoom);
     });
   });
 };

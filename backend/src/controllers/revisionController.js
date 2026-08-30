@@ -54,13 +54,20 @@ const createManualRevision = async (req, res) => {
     if (!room) return sendError(res, 404, 'Room not found or access denied.');
     const role = getMemberRole(room, req.user._id);
     if (![ROLES.OWNER, ROLES.EDITOR].includes(role)) return sendError(res, 403, 'Editor permission required.');
+
+    const content = req.body?.content !== undefined ? req.body.content : room.snapshotCode || '';
+    const language = typeof req.body?.language === 'string' ? req.body.language : room.language;
+    if (typeof content !== 'string' || content.length > 524288) return sendError(res, 400, 'Revision content must be a string no larger than 512KB.');
+    if (!Revision.schema.path('language').enumValues.includes(language)) return sendError(res, 400, 'Unsupported revision language.');
+
     const message = typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 120) : 'Manual checkpoint';
-    const revision = await createRevision({ room: room._id, author: req.user._id, content: room.snapshotCode || '', language: room.language, message: message || 'Manual checkpoint', source: 'manual' });
+    const revision = await createRevision({ room: room._id, author: req.user._id, content, language, message: message || 'Manual checkpoint', source: 'manual' });
     clearAutomaticCheckpoint(room.roomCode);
     const populated = await Revision.findById(revision._id).populate('author', 'name email').lean();
     sendSuccess(res, 'Revision checkpoint created.', { revision: populated }, { status: 201 });
   } catch (error) {
     logger.error('Create manual revision error', { message: error.message });
+    if (error.name === 'ValidationError') return sendError(res, 400, 'Invalid revision data.');
     sendError(res, 500, 'Failed to create revision checkpoint.');
   }
 };
@@ -71,20 +78,25 @@ const restoreRevision = async (req, res) => {
     if (!room) return sendError(res, 404, 'Room not found or access denied.');
     if (getMemberRole(room, req.user._id) !== ROLES.OWNER) return sendError(res, 403, 'Only the room owner can restore revisions.');
     if (!mongoose.isValidObjectId(req.params.revisionId)) return sendError(res, 400, 'Invalid revision id.');
+
     const revision = await findRevision(req.params.revisionId, room._id);
     if (!revision) return sendError(res, 404, 'Revision not found.');
 
-    const nextState = serializeState(createInitialState(revision.content));
-    if (Buffer.byteLength(nextState, 'utf8') > 4 * 1024 * 1024) return sendError(res, 400, 'Revision is too large to restore.');
     const liveState = replaceDocumentState(room.roomCode, revision.content);
     if (!liveState) return sendError(res, 400, 'Revision is too large to restore.');
 
     await Room.updateOne({ _id: room._id }, { $set: { snapshotCode: revision.content, language: revision.language, crdtState: liveState } });
-
     const restoreRevisionRecord = await createRevision({ room: room._id, author: req.user._id, content: revision.content, language: revision.language, message: `Restored revision ${revision._id}`, source: 'restore', restoredFrom: revision._id });
 
-    const io = req.app.get('io');
-    io?.to(`room:${room.roomCode}`).emit('document-restored', { roomCode: room.roomCode, state: liveState, content: revision.content, language: revision.language, restoredFrom: revision._id.toString(), restoredBy: req.user._id.toString(), revisionId: restoreRevisionRecord._id.toString() });
+    req.app.get('io')?.to(`room:${room.roomCode}`).emit('document-restored', {
+      roomCode: room.roomCode,
+      state: liveState,
+      content: revision.content,
+      language: revision.language,
+      restoredFrom: revision._id.toString(),
+      restoredBy: req.user._id.toString(),
+      revisionId: restoreRevisionRecord._id.toString(),
+    });
 
     const populatedRestore = await Revision.findById(restoreRevisionRecord._id).populate('author', 'name email').lean();
     sendSuccess(res, 'Revision restored successfully.', { revision: populatedRestore });

@@ -102,6 +102,8 @@ export const AuthProvider = ({ children }) => {
       }
     );
     return () => axios.interceptors.response.eject(interceptorId);
+    // refreshAccessToken is intentionally stable for the provider lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const authenticate = async (endpoint, payload) => {

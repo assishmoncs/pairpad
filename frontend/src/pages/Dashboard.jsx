@@ -8,6 +8,7 @@ import LanguageSelect from '../components/LanguageSelect';
 import FormField from '../components/FormField';
 
 import LoadingSpinner from '../components/LoadingSpinner';
+import Logo from '../components/Logo';
 
 const getRoomKey = (room) => room?._id || room?.roomCode;
 
@@ -108,8 +109,11 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Welcome, {user?.name}!</h1>
+      <header className="dashboard-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <Logo size={36} />
+          <h1 style={{ margin: 0 }}>Welcome, {user?.name}!</h1>
+        </div>
         <button onClick={logout} className="btn-secondary" aria-label="Logout">
           Logout
         </button>

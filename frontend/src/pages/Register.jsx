@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAsyncAction } from '../hooks/useAsyncAction';
 import FormField from '../components/FormField';
+import Logo from '../components/Logo';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -44,6 +45,9 @@ const Register = () => {
   return (
     <div className="auth-page">
       <div className="auth-container">
+        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+          <Logo size={48} />
+        </div>
         <h1>Create Account</h1>
 
         {error && <div className="error-message" aria-live="polite">{error}</div>}

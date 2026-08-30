@@ -20,8 +20,9 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Critical Socket.IO flows covered by integration tests.
 - OpenAPI contract tests cover critical paths and implementation limits.
 - Workspace UX components and keyboard shortcuts have focused tests.
+- Interview lifecycle, authorization, timeout, and hidden-test isolation have focused tests.
 - End-to-end happy path covered in two independent browser sessions.
-- Reconnect, concurrent editing, authorization, revision restore, and room lifecycle cases covered.
+- Reconnect, concurrent editing, authorization, revision restore, room lifecycle, and interview lifecycle cases covered.
 
 ## Security gates
 
@@ -31,6 +32,8 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Authentication, authorization and rate limiting enforced server-side.
 - Secrets never returned to clients or inherited by execution workers.
 - Security headers and explicit CORS allowlist enabled.
+- Hidden interview test inputs/expected outputs never exposed to candidates.
+- Candidate assignment and interview timeout enforced server-side.
 - Security scanning runs in CI.
 
 ## Collaboration gates
@@ -58,6 +61,18 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Endpoint changes update implementation and contract in the same change.
 - The OpenAPI document is documentation; server-side validation and authorization remain authoritative.
 
+## Interview gates
+
+- Owner can create and edit an interview only while it is not active.
+- Interview lifecycle supports draft, running, paused, resumed, and ended states.
+- Only the owner can control lifecycle state.
+- Candidate assignment, when configured, is enforced server-side.
+- Countdown time is enforced server-side, not only by the browser.
+- Public test inputs/expected outputs are visible to candidates.
+- Hidden test inputs/expected outputs remain private.
+- Candidate results expose hidden pass/fail metadata without revealing hidden case contents.
+- Interview submissions use the same execution isolation and limits as normal execution.
+
 ## Deployment gates
 
 - A clean environment can start the stack reproducibly.
@@ -81,4 +96,4 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 
 ## Final acceptance flow
 
-Register -> create room -> second user joins -> concurrent edit -> remote cursor -> chat -> run code -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run E2E/security suites -> build/deploy through CI.
+Register -> create room -> second user joins -> concurrent edit -> remote cursor -> chat -> run code -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> start interview -> candidate submits -> hidden tests stay private -> pause/resume/end interview -> restart backend -> verify persistence -> validate OpenAPI contract -> exercise workspace shortcuts and responsive states -> run E2E/security suites -> build/deploy through CI.

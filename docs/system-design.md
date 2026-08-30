@@ -21,10 +21,11 @@ Express + Socket.IO (Helmet + Rate Limiting)
 ### Frontend
 - Auth pages and JWT client session handling
 - Dashboard for creating and opening rooms
-- Room page with Monaco editor, CRDT collaboration, presence, chat, stdin input, execution output, and room-code sharing
+- Room page with Monaco editor, CRDT collaboration, remote cursors, presence, chat, stdin input, execution output, and room-code sharing
 - `AuthContext` + Axios authorization defaults
 - `SocketService` singleton for transport, reconnection, room state, and event bus behavior
 - `useCrdtCollaboration` owns the local CRDT and converts editor replacements into mergeable operations
+- `useRemoteCursors` owns Monaco decoration lifecycle for collaborator cursors and selections
 
 ### Backend API
 - Security headers via Helmet and endpoint rate limiting
@@ -37,26 +38,20 @@ Express + Socket.IO (Helmet + Rate Limiting)
 ### Realtime Layer (Socket.IO)
 - JWT required on handshake
 - Room membership verified before collaboration operations are accepted
-- Legacy `code-change` remains available for older clients
-- Current clients use `crdt-sync-request` and `crdt-operation`
-- The server merges CRDT operations, broadcasts only new operations, and periodically persists serialized state
-- Presence remains in-memory and is intentionally separate from CRDT document state
+- Current clients use `crdt-sync-request` and `crdt-operation` for code synchronization
+- Cursor updates are validated server-side and relayed to room peers without exposing socket internals
+- Presence remains in-memory and is explicitly cleared on disconnect/leave
+- Client cursor events are throttled to reduce event pressure while keeping UI responsive
 
 ### CRDT Layer
 Each visible character is represented by a stable logical ID plus an insertion anchor. Deletes are represented as tombstones rather than physical removal. Concurrent insertions at the same anchor use deterministic ID ordering, so replicas converge after receiving the same set of operations.
 
 The server keeps one CRDT instance per active room and persists the serialized state to `Room.crdtState`. It also maintains `snapshotCode` as a compatibility representation for older clients and easy recovery.
 
-### Database (MongoDB + Mongoose)
-- **User** — name, email (unique), hashed password
-- **Room** — name, roomCode, owner, members, language, description, snapshotCode, crdtState
-- **Message** — room, sender, content
+### Cursor Layer
+Cursor state is ephemeral and is not stored in MongoDB. Each connected client publishes its current Monaco cursor position and optional selection. The server validates the coordinates and room membership, then forwards the normalized event to other room members.
 
-### Code Execution
-- Server-side only; API keys never reach the browser
-- Primary Judge0 CE for supported languages
-- Local fallback for JS/TS/Python with environment scrubbing, wall-clock timeout, heap/output guards, and production gating
-- Custom stdin supported
+The frontend assigns each user a deterministic visual color from a shared palette. Remote cursors are rendered using Monaco decorations, including a caret indicator, selection highlight, overview-ruler marker, and collaborator name in the hover message. Cursor state is removed when a user leaves or the socket disconnects.
 
 ## Collaboration Data Flow
 
@@ -68,7 +63,8 @@ The server keeps one CRDT instance per active room and persists the serialized s
 6. Local editor changes become CRDT replace operations containing insert nodes and tombstone IDs.
 7. The server validates membership and payload size, merges the operation, broadcasts it to peers, and schedules persistence.
 8. Peers apply the operation to their local CRDT and render the converged text.
-9. Reconnects request a fresh authoritative state, restoring the local CRDT.
+9. Monaco cursor/selection changes are throttled client-side, validated server-side, and rendered as remote decorations on peers.
+10. Reconnects clear stale remote cursors, rejoin the room, and request fresh CRDT state.
 
 ## Production Hardening
 
@@ -78,6 +74,7 @@ The server keeps one CRDT instance per active room and persists the serialized s
 - Per-IP and per-event Socket.IO rate controls
 - JWT-authenticated sockets and membership enforcement
 - Debounced MongoDB persistence for CRDT state
+- Server-side cursor validation and client-side cursor throttling
 - GitHub Actions quality gates and CodeQL security analysis
 - Docker-based deployment foundation
 
@@ -85,12 +82,10 @@ The server keeps one CRDT instance per active room and persists the serialized s
 
 - Presence is in-memory; Redis is still required for multi-instance Socket.IO deployments.
 - Character-level CRDT operations are intentionally simple and may use more metadata than production-grade binary CRDT formats.
-- Remote Monaco cursor rendering is still a separate milestone.
 - Authentication hardening, isolated execution workers, revision history, RBAC, and E2E testing remain on the roadmap.
 
 ## Roadmap
 
-- Remote Monaco cursor rendering
 - Role-based permissions (owner / editor / viewer)
 - Session replay and historical revisions
 - Redis adapter for horizontal Socket.IO scaling

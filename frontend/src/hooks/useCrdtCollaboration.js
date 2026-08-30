@@ -3,6 +3,8 @@ import socketService from '../services/socketService';
 import { TextCrdt, makeClientId } from '../utils/textCrdt';
 
 const ACK_TIMEOUT_MS = 5000;
+const JOIN_SYNC_WAIT_MS = 5000;
+const JOIN_SYNC_RETRY_MS = 50;
 
 export const useCrdtCollaboration = ({
   room,
@@ -24,13 +26,14 @@ export const useCrdtCollaboration = ({
 
   const requestSync = useCallback(() => {
     const socket = socketService.socket;
-    if (!socket?.connected || !socketService.getCurrentRoom()) return;
+    if (!socket?.connected || !socketService.getCurrentRoom()) return false;
 
     socket.timeout(ACK_TIMEOUT_MS).emit('crdt-sync-request', {}, (ackError, response) => {
       if (ackError || response?.error) {
         setCrdtError(response?.error || 'Collaborative synchronization timed out.');
       }
     });
+    return true;
   }, []);
 
   useEffect(() => {
@@ -43,7 +46,6 @@ export const useCrdtCollaboration = ({
       const handleSync = ({ state } = {}) => {
         if (initializedRef.current) return;
         initializedRef.current = true;
-
         crdtRef.current.resetFromState(state);
         applyingRemoteRef.current = true;
         emitText(crdtRef.current.getText());
@@ -55,7 +57,6 @@ export const useCrdtCollaboration = ({
       const handleOperation = (operation) => {
         const changed = crdtRef.current.applyReplaceOperation(operation);
         if (!changed) return;
-
         applyingRemoteRef.current = true;
         emitText(crdtRef.current.getText());
         applyingRemoteRef.current = false;
@@ -68,9 +69,24 @@ export const useCrdtCollaboration = ({
       socket.on('crdt-sync', handleSync);
       socket.on('crdt-operation', handleOperation);
       socket.on('crdt-error', handleError);
-      requestSync();
+
+      // Room join is performed by useCollaboration in another effect. Wait for
+      // its room assignment before asking the CRDT bridge for state.
+      const start = Date.now();
+      let retryTimer = null;
+      const tryRequest = () => {
+        if (initializedRef.current) return;
+        if (requestSync()) return;
+        if (Date.now() - start >= JOIN_SYNC_WAIT_MS) {
+          setCrdtError('Could not initialize collaborative editing for this room.');
+          return;
+        }
+        retryTimer = window.setTimeout(tryRequest, JOIN_SYNC_RETRY_MS);
+      };
+      tryRequest();
 
       return () => {
+        if (retryTimer) window.clearTimeout(retryTimer);
         socket.off('crdt-sync', handleSync);
         socket.off('crdt-operation', handleOperation);
         socket.off('crdt-error', handleError);

@@ -21,7 +21,9 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - OpenAPI contract tests cover critical paths and implementation limits.
 - Workspace UX components, path validation, and file model constraints have focused tests.
 - Interview lifecycle, authorization, timeout, and hidden-test isolation have focused tests.
-- End-to-end happy path covered in two independent browser sessions.
+- Adversarial API tests cover unauthorized room access, viewer execution, malformed identifiers, oversized payloads, and ownership boundaries.
+- Browser E2E covers two independent sessions sharing a room and editing the same workspace file.
+- Browser E2E failures retain screenshots, video and traces in CI.
 - Reconnect, concurrent editing, authorization, revision restore, room lifecycle, workspace switching, and interview lifecycle cases covered.
 
 ## Security gates
@@ -35,6 +37,7 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Hidden interview test inputs/expected outputs never exposed to candidates.
 - Candidate assignment and interview timeout enforced server-side.
 - Workspace paths reject traversal and unsafe path components.
+- Adversarial API/security suites run in CI with MongoDB and Redis.
 - Security scanning runs in CI.
 
 ## Collaboration gates
@@ -72,7 +75,7 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - OpenAPI 3.1 contract is checked into `docs/openapi.yaml`.
 - Runtime contract is available at `/api/openapi.yaml`.
 - Human-readable API landing page is available at `/api/docs`.
-- Workspace endpoint details are maintained in the workspace API fragment until consolidated into the main contract.
+- Workspace and Interview endpoint details have checked-in API fragments until consolidated into the main contract.
 - Endpoint changes update implementation and contract documentation in the same change.
 - The OpenAPI document is documentation; server-side validation and authorization remain authoritative.
 

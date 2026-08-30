@@ -38,6 +38,7 @@ const applyOperationAtomic = async (roomCode, operation) => {
         await redis.unwatch();
         return null;
       }
+
       const nodes = deserializeState(current);
       const changed = applyReplaceOperation(nodes, operation);
       const nextState = serializeState(nodes);
@@ -48,7 +49,11 @@ const applyOperationAtomic = async (roomCode, operation) => {
         return { changed, state: nextState, text: visibleText(nodes) };
       }
     } catch (error) {
-      try { await redis.unwatch(); } catch {}
+      try {
+        await redis.unwatch();
+      } catch (unwatchError) {
+        void unwatchError;
+      }
       throw error;
     }
   }

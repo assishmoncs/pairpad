@@ -10,9 +10,10 @@ const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 5000;
 const MIN_DURATION = 1;
 const MAX_DURATION = 24 * 60;
-
+const SUPPORTED_LANGUAGES = new Set(['javascript', 'python', 'java', 'cpp', 'c', 'go', 'rust', 'typescript', 'php', 'ruby']);
 const statuses = new Set(['draft', 'running', 'paused', 'ended']);
 const cleanText = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+
 const normalizeTests = (tests = [], hidden = false) => !Array.isArray(tests) ? [] : tests.slice(0, MAX_TESTS).map((test, index) => ({
   id: typeof test?.id === 'string' && test.id ? test.id : crypto.randomUUID(),
   name: cleanText(test?.name, 100) || `Test ${index + 1}`,
@@ -45,7 +46,7 @@ const validateConfig = (payload = {}) => {
   if (!title) throw Object.assign(new Error('Interview title is required.'), { code: 'INVALID_INTERVIEW' });
   if (!description) throw Object.assign(new Error('Interview problem statement is required.'), { code: 'INVALID_INTERVIEW' });
   if (!Number.isInteger(durationMinutes) || durationMinutes < MIN_DURATION || durationMinutes > MAX_DURATION) throw Object.assign(new Error(`Duration must be between ${MIN_DURATION} and ${MAX_DURATION} minutes.`), { code: 'INVALID_INTERVIEW' });
-  if (!language) throw Object.assign(new Error('Interview language is required.'), { code: 'INVALID_INTERVIEW' });
+  if (!SUPPORTED_LANGUAGES.has(language)) throw Object.assign(new Error(`Unsupported interview language. Supported: ${[...SUPPORTED_LANGUAGES].join(', ')}`), { code: 'INVALID_INTERVIEW' });
   return { title, description, durationMinutes, language, publicTests: normalizeTests(payload.publicTests, false), hiddenTests: normalizeTests(payload.hiddenTests, true) };
 };
 
@@ -53,11 +54,15 @@ const requireOwner = (room, userId) => {
   if (getRoomRole(room, userId) !== ROLES.OWNER) throw Object.assign(new Error('Only the room owner can manage interview mode.'), { code: 'FORBIDDEN' });
 };
 
+const isRoomMember = (room, userId) => room.members?.some((member) => String(member?._id || member) === String(userId));
+
 const createOrUpdateInterview = async (room, userId, payload) => {
   requireOwner(room, userId);
   if (['running', 'paused'].includes(room.interview?.status)) throw Object.assign(new Error('Stop the active interview before editing its configuration.'), { code: 'INTERVIEW_ACTIVE' });
   const config = validateConfig(payload);
-  room.interview = { ...config, status: 'draft', startedAt: null, pausedAt: null, endedAt: null, remainingSeconds: config.durationMinutes * 60, candidateId: payload.candidateId || null };
+  if (config.candidateId && !isRoomMember(room, config.candidateId)) throw Object.assign(new Error('The candidate must be a member of the room.'), { code: 'INVALID_INTERVIEW' });
+  const candidateId = payload.candidateId || null;
+  room.interview = { ...config, candidateId, status: 'draft', startedAt: null, pausedAt: null, endedAt: null, remainingSeconds: config.durationMinutes * 60 };
   await room.save();
   return room.interview;
 };
@@ -73,8 +78,7 @@ const pauseInterview = async (room, userId) => {
   requireOwner(room, userId);
   if (room.interview?.status !== 'running') throw Object.assign(new Error('Only a running interview can be paused.'), { code: 'INVALID_STATE' });
   const elapsed = Math.floor((Date.now() - new Date(room.interview.startedAt).getTime()) / 1000);
-  room.interview.remainingSeconds = Math.max(0, room.interview.remainingSeconds - elapsed); room.interview.pausedAt = new Date();
-  room.interview.status = room.interview.remainingSeconds === 0 ? 'ended' : 'paused';
+  room.interview.remainingSeconds = Math.max(0, room.interview.remainingSeconds - elapsed); room.interview.pausedAt = new Date(); room.interview.status = room.interview.remainingSeconds === 0 ? 'ended' : 'paused';
   if (room.interview.status === 'ended') room.interview.endedAt = new Date();
   await room.save(); return room.interview;
 };
@@ -119,4 +123,4 @@ const submitCandidate = async (room, userId, sourceCode, language) => {
   return { publicResults, hiddenResults, hiddenPassed: hiddenResults.filter((entry) => entry.passed).length, score: [...publicResults, ...hiddenResults].filter((entry) => entry.passed).length, total: publicResults.length + hiddenResults.length };
 };
 
-module.exports = { validateConfig, createOrUpdateInterview, startInterview, pauseInterview, resumeInterview, endInterview, submitCandidate, sanitizePublicInterview, sanitizeHostInterview, statuses };
+module.exports = { validateConfig, createOrUpdateInterview, startInterview, pauseInterview, resumeInterview, endInterview, submitCandidate, sanitizePublicInterview, sanitizeHostInterview, statuses, SUPPORTED_LANGUAGES };

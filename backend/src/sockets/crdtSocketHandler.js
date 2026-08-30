@@ -1,13 +1,8 @@
 const Room = require('../models/Room');
 const logger = require('../utils/logger');
-const { findRoomByCode, isRoomParticipant, normalizeRoomCode } = require('../utils/roomAccess');
-const {
-  createInitialState,
-  deserializeState,
-  serializeState,
-  visibleText,
-  applyReplaceOperation,
-} = require('../services/textCrdt');
+const { findRoomByCode, isRoomParticipant, normalizeRoomCode, getRoomRole } = require('../utils/roomAccess');
+const { ROLES, canEdit, getMemberRole } = require('../utils/roomPermissions');
+const { createInitialState, deserializeState, serializeState, visibleText, applyReplaceOperation } = require('../services/textCrdt');
 
 const MAX_OPERATION_BYTES = 256 * 1024;
 const MAX_STATE_BYTES = 4 * 1024 * 1024;
@@ -55,6 +50,14 @@ const isMember = async (socket) => {
   return Boolean(room && isRoomParticipant(room, socket.user._id));
 };
 
+const getAuthorizedRoom = async (socket, requireEdit = false) => {
+  if (!socket.currentRoom || !socket.user?._id) return null;
+  const room = await findRoomByCode(socket.currentRoom);
+  if (!room || !isRoomParticipant(room, socket.user._id)) return null;
+  if (requireEdit && !canEdit(getMemberRole(room, socket.user._id))) return null;
+  return room;
+};
+
 const withinOperationRate = (socket) => {
   const now = Date.now();
   const windowStart = now - OP_WINDOW_MS;
@@ -65,20 +68,18 @@ const withinOperationRate = (socket) => {
   return true;
 };
 
-/** Attach CRDT events to the existing authenticated Socket.IO server. */
 const initializeCrdtSocket = (io) => {
   io.on('connection', (socket) => {
     socket.on('crdt-sync-request', async (_data, callback) => {
       try {
-        if (!(await isMember(socket))) return callback?.({ error: 'Room membership required.' });
+        const room = await getAuthorizedRoom(socket, false);
+        if (!room) return callback?.({ error: 'Room membership required.' });
         const document = await getDocument(socket.currentRoom);
         if (!document) return callback?.({ error: 'Room not found.' });
         const state = serializeState(document.nodes);
-        if (Buffer.byteLength(state, 'utf8') > MAX_STATE_BYTES) {
-          return callback?.({ error: 'Collaborative document is too large to synchronize.' });
-        }
-        socket.emit('crdt-sync', { state, version: 1 });
-        callback?.({ success: true });
+        if (Buffer.byteLength(state, 'utf8') > MAX_STATE_BYTES) return callback?.({ error: 'Collaborative document is too large to synchronize.' });
+        socket.emit('crdt-sync', { state, version: 1, role: getRoomRole(room, socket.user._id) });
+        callback?.({ success: true, role: getRoomRole(room, socket.user._id) });
       } catch (error) {
         logger.error('CRDT sync request failed', { message: error.message });
         callback?.({ error: 'Failed to synchronize collaborative document.' });
@@ -87,7 +88,8 @@ const initializeCrdtSocket = (io) => {
 
     socket.on('crdt-operation', async (operation, callback) => {
       try {
-        if (!(await isMember(socket))) return callback?.({ error: 'Room membership required.' });
+        const room = await getAuthorizedRoom(socket, true);
+        if (!room) return callback?.({ error: 'Editor permission required.' });
         if (!withinOperationRate(socket)) return callback?.({ error: 'CRDT operation rate limit exceeded.' });
         if (!operation || operation.type !== 'replace') return callback?.({ error: 'Unsupported CRDT operation.' });
         const size = Buffer.byteLength(JSON.stringify(operation), 'utf8');

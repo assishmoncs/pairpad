@@ -18,7 +18,7 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Critical REST flows covered by integration tests.
 - Critical Socket.IO flows covered by integration tests.
 - End-to-end happy path covered in two independent browser sessions.
-- Reconnect, concurrent editing, authorization and room lifecycle cases covered.
+- Reconnect, concurrent editing, authorization, revision restore, and room lifecycle cases covered.
 
 ## Security gates
 
@@ -36,6 +36,16 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 - Remote cursor/selection state must be isolated from document state.
 - Reconnect must restore room membership and collaboration state.
 - Presence must work correctly across multiple backend instances.
+- A document restore must replace both persisted and in-memory collaboration state and notify connected clients.
+
+## Revision-history gates
+
+- Revisions are immutable checkpoints with room, author, language, source and timestamp metadata.
+- Automatic checkpoints are throttled and do not create a database write for every keystroke.
+- Members can browse history and compare revisions.
+- Editors can create manual checkpoints.
+- Only owners can restore revisions.
+- Restoring a revision creates a new restore checkpoint for auditability.
 
 ## Deployment gates
 
@@ -55,4 +65,4 @@ This document defines the acceptance gates for the PairPad hardening roadmap. Th
 
 ## Final acceptance flow
 
-Register -> create room -> second user joins -> concurrent edit -> remote cursor -> chat -> run code -> disconnect -> reconnect -> inspect history -> verify permissions -> restart backend -> verify persistence -> run E2E/security suites -> build/deploy through CI.
+Register -> create room -> second user joins -> concurrent edit -> remote cursor -> chat -> run code -> create revision -> compare history -> restore revision -> disconnect -> reconnect -> verify permissions -> restart backend -> verify persistence -> run E2E/security suites -> build/deploy through CI.

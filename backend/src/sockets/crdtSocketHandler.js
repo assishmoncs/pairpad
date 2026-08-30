@@ -20,6 +20,43 @@ const SAVE_DEBOUNCE_MS = 750;
 const documents = new Map();
 const saveTimers = new Map();
 
+const isValidPosition = (position) =>
+  position &&
+  Number.isInteger(position.line) &&
+  Number.isInteger(position.column) &&
+  position.line >= 1 &&
+  position.column >= 1 &&
+  position.line <= 100000 &&
+  position.column <= 100000;
+
+const normalizeSelection = (selection) => {
+  if (!selection) return null;
+  const valid =
+    Number.isInteger(selection.startLineNumber) &&
+    Number.isInteger(selection.startColumn) &&
+    Number.isInteger(selection.endLineNumber) &&
+    Number.isInteger(selection.endColumn);
+  if (!valid) return null;
+  if (
+    selection.startLineNumber < 1 ||
+    selection.startColumn < 1 ||
+    selection.endLineNumber < 1 ||
+    selection.endColumn < 1 ||
+    selection.startLineNumber > 100000 ||
+    selection.endLineNumber > 100000 ||
+    selection.startColumn > 100000 ||
+    selection.endColumn > 100000
+  ) {
+    return null;
+  }
+  return {
+    startLineNumber: selection.startLineNumber,
+    startColumn: selection.startColumn,
+    endLineNumber: selection.endLineNumber,
+    endColumn: selection.endColumn,
+  };
+};
+
 const getDocument = async (roomCode) => {
   const normalized = normalizeRoomCode(roomCode);
   if (documents.has(normalized)) return documents.get(normalized);
@@ -59,8 +96,6 @@ const schedulePersist = (roomCode) => {
           {
             $set: {
               crdtState: serialized,
-              // Keep the legacy snapshot populated for older clients and easy
-              // recovery. The CRDT state remains the authoritative collaborative state.
               snapshotCode: visibleText(document.nodes),
             },
           }
@@ -141,6 +176,31 @@ const initializeCrdtSocket = (io) => {
       } catch (error) {
         logger.error('CRDT operation failed', { message: error.message });
         callback?.({ error: 'Failed to apply collaborative edit.' });
+      }
+    });
+
+    socket.on('cursor-update', async (data, callback) => {
+      try {
+        if (!(await isMember(socket))) {
+          return callback?.({ error: 'Room membership required.' });
+        }
+        if (!isValidPosition(data?.position)) {
+          return callback?.({ error: 'Invalid cursor position.' });
+        }
+
+        socket.to(`room:${socket.currentRoom}`).emit('cursor-update', {
+          userId: socket.user._id.toString(),
+          userName: socket.user.name,
+          position: {
+            line: data.position.line,
+            column: data.position.column,
+          },
+          selection: normalizeSelection(data.selection),
+        });
+        callback?.({ success: true });
+      } catch (error) {
+        logger.error('Cursor update failed', { message: error.message });
+        callback?.({ error: 'Failed to update cursor.' });
       }
     });
   });

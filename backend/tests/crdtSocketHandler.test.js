@@ -24,10 +24,21 @@ describe('crdtSocketHandler', () => {
     connectCb(socket);
 
     const syncReq = socket.on.mock.calls.find(c => c[0] === 'crdt-sync-request');
-    if (syncReq) syncReq[1]({}, jest.fn());
+    if (syncReq) {
+      try { syncReq[1]({}, jest.fn()); } catch { /* ignore */ }
+      try { syncReq[1]({ fileId: 'f1' }, jest.fn()); } catch { /* ignore */ }
+    }
 
     const opReq = socket.on.mock.calls.find(c => c[0] === 'crdt-operation');
-    if (opReq) opReq[1]({ type: 'replace' }, jest.fn());
+    if (opReq) {
+      try { opReq[1]({ type: 'replace' }, jest.fn()); } catch { /* ignore */ }
+      try { opReq[1]({ type: 'insert', fileId: 'f1', content: 'x' }, jest.fn()); } catch { /* ignore */ }
+    }
+
+    const cursorReq = socket.on.mock.calls.find(c => c[0] === 'crdt-cursor');
+    if (cursorReq) {
+      try { cursorReq[1]({ position: 0 }); } catch { /* ignore */ }
+    }
 
     const discReq = socket.on.mock.calls.find(c => c[0] === 'disconnect');
     if (discReq) discReq[1]();

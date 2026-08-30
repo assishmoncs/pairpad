@@ -42,8 +42,15 @@ describe('socketHandlerDistributed', () => {
     socketHandlerDistributed(io);
     
     // Call every handler with a dummy payload
+    const variations = [
+      { roomCode: 'ROOM1', fileId: 'F1', content: 'x', type: 'x', position: {}, language: 'javascript', code: 'test' },
+      { roomCode: 'ROOM1' },
+      {}
+    ];
     for (const handler of Object.values(handlers)) {
-       try { await handler({ roomCode: 'ROOM1', fileId: 'F1', content: 'x', type: 'x', position: {} }); } catch { /* ignore */ }
+       for (const payload of variations) {
+         try { await handler(payload); } catch { /* ignore */ }
+       }
        try { await handler(); } catch { /* ignore */ }
     }
   });

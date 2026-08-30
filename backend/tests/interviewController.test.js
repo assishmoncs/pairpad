@@ -27,18 +27,25 @@ describe('interviewController', () => {
   it('gets interview', async () => {
     await getInterview(req, res);
     expect(apiResponse.sendSuccess).toHaveBeenCalled();
+    req.params.roomCode = null;
+    await getInterview(req, res);
   });
 
   it('configures interview', async () => {
+    req.body = { questions: [] };
     interviewService.createOrUpdateInterview.mockResolvedValue({});
     await configureInterview(req, res);
     expect(apiResponse.sendSuccess).toHaveBeenCalled();
+    req.body = {};
+    await configureInterview(req, res);
   });
 
   it('starts interview', async () => {
     interviewService.startInterview.mockResolvedValue({});
     await startInterview(req, res);
     expect(apiResponse.sendSuccess).toHaveBeenCalled();
+    roomAccess.getRoomRole.mockReturnValue('viewer');
+    await startInterview(req, res);
   });
   
   it('submits interview', async () => {
@@ -46,5 +53,7 @@ describe('interviewController', () => {
     interviewService.submitCandidate.mockResolvedValue({ publicResults: [], hiddenResults: [], hiddenPassed: true, score: 100, total: 100 });
     await submit(req, res);
     expect(apiResponse.sendSuccess).toHaveBeenCalled();
+    req.body = {};
+    await submit(req, res);
   });
 });

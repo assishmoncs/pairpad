@@ -16,7 +16,14 @@ describe('Server', () => {
     await request(app).get('/metrics').set('x-metrics-token', 'token123').expect(200);
   });
   afterAll((done) => {
-    if(app.close) app.close(done);
-    else done();
+    if (app.close) {
+      try {
+        app.close(done);
+      } catch (e) {
+        done();
+      }
+    } else {
+      done();
+    }
   });
 });

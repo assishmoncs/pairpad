@@ -8,9 +8,9 @@ describe('Models', () => {
       Room.schema.methods.toJSON.call({ toObject: () => ({ snapshotCode: 'a', _id: 'b', members: [], memberRoles: [], interview: { status: 'idle' } }) });
     }
   });
-  it('covers User', () => {
+  it('covers User', async () => {
     expect(User).toBeDefined();
     if(User.schema.methods.toJSON) User.schema.methods.toJSON.call({ toObject: () => ({ password: 'a', __v: 1 }) });
-    if(User.schema.methods.comparePassword) User.schema.methods.comparePassword.call({ password: 'a' }, 'b').catch(() => {});
+    if(User.schema.methods.comparePassword) await User.schema.methods.comparePassword.call({ password: 'a' }, 'b').catch(() => {});
   });
 });

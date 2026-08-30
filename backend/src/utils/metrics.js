@@ -37,10 +37,11 @@ const snapshot = () => ({
 const escapeLabelValue = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 
 const toPrometheus = () => {
+  const current = snapshot();
   const lines = [
     '# HELP pairpad_uptime_seconds Process uptime in seconds.',
     '# TYPE pairpad_uptime_seconds gauge',
-    `pairpad_uptime_seconds ${snapshot().uptimeSeconds}`,
+    `pairpad_uptime_seconds ${current.uptimeSeconds}`,
     '# HELP pairpad_http_requests_in_flight Current HTTP requests in flight.',
     '# TYPE pairpad_http_requests_in_flight gauge',
     `pairpad_http_requests_in_flight ${inFlight}`,
@@ -49,7 +50,9 @@ const toPrometheus = () => {
     `pairpad_http_requests_completed_total ${completedRequests}`,
     '# HELP pairpad_http_request_duration_average_ms Average completed request duration in milliseconds.',
     '# TYPE pairpad_http_request_duration_average_ms gauge',
-    `pairpad_http_request_duration_average_ms ${snapshot().averageRequestDurationMs}`,
+    `pairpad_http_request_duration_average_ms ${current.averageRequestDurationMs}`,
+    '# HELP pairpad_http_requests_total Total HTTP requests by overall count and dimensions.',
+    '# TYPE pairpad_http_requests_total counter',
   ];
 
   for (const [key, value] of counters.entries()) {
@@ -58,9 +61,8 @@ const toPrometheus = () => {
     const labelMatch = metric.match(/^http_requests_(method|status)_(.+)$/);
     if (labelMatch) {
       const [, dimension, label] = labelMatch;
-      const metricName = `pairpad_http_requests_total`;
       const labelName = dimension === 'method' ? 'method' : 'status_class';
-      lines.push(`${metricName}{${labelName}="${escapeLabelValue(label)}"} ${value}`);
+      lines.push(`pairpad_http_requests_total{${labelName}="${escapeLabelValue(label)}"} ${value}`);
     } else if (metric === 'http_requests_total') {
       lines.push(`pairpad_http_requests_total ${value}`);
     }

@@ -50,15 +50,19 @@ test.describe('PairPad collaboration smoke flow', () => {
     await collaborator.getByRole('button', { name: 'src/main.js' }).click();
     await expect(collaborator.getByText('src/main.js')).toBeVisible();
 
-    await owner.locator('.monaco-editor').click();
+    const ownerEditor = owner.locator('.monaco-editor').last();
+    await ownerEditor.click();
     await owner.keyboard.type('console.log("shared");');
-    await expect(collaborator.locator('.monaco-editor')).toContainText('shared', { timeout: 10000 });
+
+    const collaboratorEditor = collaborator.locator('.monaco-editor .view-lines').last();
+    await expect(collaboratorEditor.getByText('console.log', { exact: false })).toBeVisible({ timeout: 10000 });
+    await expect(collaboratorEditor).toContainText('shared', { timeout: 10000 });
 
     await owner.close();
     await collaborator.close();
   });
 
-  test('workspace exposes recovery and shortcut controls', async ({ page }) => {
+  test('login surfaces a useful error for invalid credentials', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: /Login to PairPad/i })).toBeVisible();
     await page.getByLabel('Email').fill('missing@example.com');

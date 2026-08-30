@@ -56,7 +56,14 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm install
       - run: npm run lint
-      - run: npm test
+      - name: Run backend tests
+        run: npm test -- --json --outputFile=backend-test-results.json
+      - name: Upload backend test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pairpad-backend-test-report
+          path: backend/backend-test-results.json
 
   frontend:
     runs-on: ubuntu-latest

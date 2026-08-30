@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 const logger = require('./utils/logger');
+const { toPrometheus } = require('./utils/metrics');
 const authRoutes = require('./routes/authRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const revisionRoutes = require('./routes/revisionRoutes');
@@ -30,6 +31,7 @@ if (!process.env.JWT_SECRET) {
 const app = express();
 const PORT = process.env.PORT || 5000;
 const ALLOWED_ORIGINS = (process.env.CLIENT_URL || 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean);
+const METRICS_TOKEN = process.env.METRICS_TOKEN || '';
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -73,6 +75,18 @@ app.get('/ready', async (_req, res) => {
   return res.status(503).json({ status: 'not_ready', db: dbConnected ? 'connected' : 'disconnected', redis: redisConnected ? 'connected' : 'disconnected' });
 });
 
+app.get('/metrics', (req, res) => {
+  const providedToken = req.get('x-metrics-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (process.env.NODE_ENV === 'production' && (!METRICS_TOKEN || providedToken !== METRICS_TOKEN)) {
+    return res.status(404).end();
+  }
+  if (METRICS_TOKEN && providedToken !== METRICS_TOKEN) {
+    return res.status(401).json({ status: 'fail', code: 'METRICS_UNAUTHORIZED', message: 'Metrics authentication required.' });
+  }
+  res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+  return res.send(toPrometheus());
+});
+
 app.use('/api', apiLimiter);
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/rooms', roomRoutes);
@@ -100,6 +114,7 @@ async function startServer() {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`Health endpoint: http://localhost:${PORT}/health`);
       logger.info(`Readiness endpoint: http://localhost:${PORT}/ready`);
+      logger.info(`Metrics endpoint: http://localhost:${PORT}/metrics`);
       logger.info(`API contract: http://localhost:${PORT}/api/openapi.yaml`);
       logger.info(`API docs: http://localhost:${PORT}/api/docs`);
       logger.info(`Socket.IO mode: ${isSocketScalingEnabled() ? 'Redis multi-instance' : 'single-node fallback'}`);

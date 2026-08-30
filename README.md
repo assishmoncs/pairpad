@@ -12,27 +12,52 @@
 
 </div>
 
-PairPad is a full-stack collaborative coding platform built around Monaco Editor, Socket.IO, a conflict-free sequence CRDT, persistent room state and revision history, remote cursors, role-based access, integrated code execution, multi-file workspaces, technical interview workflows, Redis scaling, and operational quality gates. Multiple users can join a room, edit files concurrently, compare revisions, restore checkpoints, chat, execute code, and collaborate directly in the browser.
+PairPad is a full-stack collaborative coding platform built around Monaco Editor, Socket.IO, a conflict-free sequence CRDT, persistent room state and revision history, remote cursors, role-based access, workspace files, interview mode, and integrated code execution. Multiple users can join a room, edit documents concurrently, compare revisions, restore checkpoints, chat, execute code, and collaborate directly in the browser.
 
 ## Features
 
 | Category | What It Does |
 |---|---|
-| **Authentication** | Register, login, short-lived access tokens, rotating HttpOnly refresh sessions, logout-all |
+| **Authentication** | Register, login, JWT access/refresh sessions |
 | **Rooms** | Create, join, leave, delete, transfer ownership, and manage member roles |
 | **Live Editing** | Monaco Editor backed by a deterministic sequence CRDT; concurrent edits converge without last-write-wins document replacement |
 | **Remote Cursors** | Throttled cursor/selection broadcasting with deterministic collaborator colors and hover names |
-| **Presence** | Real-time connected-member state with reconnect cleanup and optional Redis distribution |
+| **Presence** | Real-time list of connected room members with reconnect cleanup and Redis-backed multi-instance support |
 | **Roles** | Owner, editor, and viewer permissions enforced by REST and Socket.IO and mirrored by the UI |
 | **Revision History** | Automatic checkpoints, manual checkpoints, comparisons, authorship metadata, and owner-only restore |
-| **Workspace** | Multi-file tree with create, rename, delete, language detection, and per-file CRDT state |
-| **Interview Mode** | Problem statements, candidate assignment, timer, lifecycle controls, public samples, and private hidden tests |
+| **Workspace** | Multi-file tree with create, rename, delete, language detection, per-file CRDT state, and active-file execution |
+| **Interview Mode** | Problem statements, candidate assignment, timer, public/hidden tests, lifecycle controls, and safe hidden-result redaction |
 | **Chat** | MongoDB-backed persistent room messaging with real-time delivery |
-| **Code Execution** | Judge0 integration with optional isolated worker execution for supported languages |
-| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, token rotation |
-| **Resilience** | Socket reconnection, room rejoin, CRDT recovery, document restore propagation, health/readiness probes |
-| **Observability** | Structured logs, request correlation, protected Prometheus-compatible metrics, performance budgets |
-| **Performance** | API p95/error-rate budget and frontend JavaScript bundle-size budget executed in CI |
+| **Code Execution** | Judge0 integration plus an optional isolated execution worker |
+| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, and protected metrics |
+| **Resilience** | Socket reconnection, room rejoin, CRDT recovery, document restore propagation, and health/readiness probes |
+| **Observability** | Structured request logs, request IDs, latency counters, status counters, and Prometheus-compatible metrics |
+| **Accessibility** | Skip navigation, keyboard focus styling, reduced-motion support, semantic controls, and automated browser accessibility gates |
+
+## Room roles
+
+| Role | View | Edit | Execute | Create checkpoint | Manage members | Transfer ownership | Restore | Delete room |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Owner | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Editor | Yes | Yes | Yes | Yes | No | No | No | No |
+| Viewer | Yes | No | No | No | No | No | No | No |
+
+The server remains authoritative; hiding UI controls is never used as a security boundary.
+
+## Accessibility
+
+PairPad includes automated browser checks for accessible names, form labels, image alternatives, keyboard navigation hygiene, and visible focus. It also provides skip navigation, route-focus management, and reduced-motion support. See `docs/ACCESSIBILITY.md` for the release gate and manual WCAG review checklist.
+
+## Tech Stack
+
+| Layer | Technologies |
+|---|---|
+| **Frontend** | React 18, Vite, React Router v6, Axios, Socket.IO Client, Monaco Editor |
+| **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet |
+| **Collaboration** | Dependency-free sequence CRDT over authenticated Socket.IO transport |
+| **Code Execution** | Judge0 CE + optional isolated execution worker |
+| **Testing** | Jest + Supertest · Vitest + Testing Library · Playwright |
+| **Tooling** | ESLint + Prettier · GitHub Actions · CodeQL · Dependabot |
 
 ## Quick Start
 
@@ -69,69 +94,19 @@ Frontend: `http://localhost:5173`.
 docker compose up --build
 ```
 
-The Compose stack includes MongoDB, Redis, backend, frontend, and the isolated execution worker. Local host execution remains disabled by default.
+The Compose stack includes MongoDB, Redis, backend, frontend, and the optional execution worker. Production local execution remains disabled by default.
 
-## API Reference
+## API & Operations
 
-The checked-in OpenAPI contract is available at `docs/openapi.yaml`. When the backend is running:
+The REST contract is exposed at `/api/openapi.yaml` with a human-readable documentation landing page at `/api/docs`. Operational metrics are exposed through `/metrics`; in production this endpoint requires `METRICS_TOKEN`.
 
-- `/api/openapi.yaml` — machine-readable contract
-- `/api/docs` — API documentation landing page
+## Testing
 
-See `docs/API.md` for the endpoint guide.
+Backend: `npm test` · frontend: `npm test` / `npm run test:coverage` · browser: `npx playwright test`.
 
-## Testing and quality
+CI provisions MongoDB and Redis, runs lint/format/test/build checks, browser collaboration tests, security flows, performance budgets, and accessibility gates. Browser failures retain screenshots, traces, video, and server logs.
 
-```bash
-# backend
-cd backend
-npm test
-npm run lint
-npm run perf
-
-# frontend
-cd ../frontend
-npm test
-npm run lint
-npm run format:check
-npm run perf
-npm run test:e2e
-```
-
-Performance budgets are described in `docs/PERFORMANCE.md`. CI runs functional, security, browser, and performance gates with MongoDB and Redis services.
-
-## Project Structure
-
-```text
-pairpad/
-├── backend/
-│   ├── scripts/             # Performance/load budget checks
-│   ├── src/
-│   │   ├── controllers/     # Auth, rooms, execution, revisions, interviews, workspace
-│   │   ├── middleware/      # Auth, limits, request/error handling
-│   │   ├── models/          # User, Room, Message, Revision, WorkspaceFile, RefreshSession
-│   │   ├── routes/          # REST routes
-│   │   ├── services/        # Execution, CRDT, Redis, history, workspace
-│   │   ├── sockets/         # Socket.IO collaboration and scaling
-│   │   └── utils/           # Validation, auth, access, logging, metrics
-│   └── tests/
-├── frontend/
-│   └── src/
-│       ├── components/      # Room panels, history, members, execution, chat, interview, workspace
-│       ├── context/         # AuthContext
-│       ├── hooks/           # Collaboration, CRDT, cursors, chat, execution
-│       ├── pages/
-│       └── services/
-├── execution-worker/        # Isolated execution service
-├── .github/workflows/
-├── docs/
-├── docker-compose.yml
-├── README.md
-├── SECURITY.md
-└── LICENSE
-```
-
-## Quality Roadmap
+## Quality status
 
 - [x] Repository quality baseline and security automation
 - [x] Docker deployment foundation
@@ -147,13 +122,10 @@ pairpad/
 - [x] Interview mode with hidden test cases
 - [x] Multi-file workspace
 - [x] Observability baseline
-- [x] Performance budgets and load-test smoke gates
-- [ ] Accessibility automated gate
-- [ ] Production deployment promotion/rollback automation
-- [ ] Consolidate workspace/interview OpenAPI fragments into the main contract
-- [ ] Full production-grade sandbox fleet with dedicated hosts and stronger isolation
+- [x] Performance budgets and load-test gates
+- [x] Automated accessibility gate
 
-See `docs/QUALITY_BASELINE.md`, `docs/SECURITY.md`, `docs/PERFORMANCE.md`, `docs/OBSERVABILITY.md`, `docs/DEPLOYMENT.md`, and `docs/system-design.md`.
+See `docs/RBAC.md`, `docs/system-design.md`, `docs/DEPLOYMENT.md`, `docs/ACCESSIBILITY.md`, `docs/PERFORMANCE.md`, and `docs/QUALITY_BASELINE.md`.
 
 ## License
 

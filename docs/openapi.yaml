@@ -1,0 +1,267 @@
+openapi: 3.1.0
+info:
+  title: PairPad API
+  version: 1.0.0
+  description: Authoritative REST contract for PairPad collaborative coding.
+servers:
+  - url: http://localhost:5000
+    description: Local development
+  - url: https://api.example.com
+    description: Production placeholder
+security:
+  - bearerAuth: []
+tags:
+  - { name: Authentication }
+  - { name: Rooms }
+  - { name: History }
+  - { name: Messages }
+  - { name: Execution }
+  - { name: Health }
+paths:
+  /health:
+    get:
+      tags: [Health]
+      security: []
+      responses: { '200': { description: Liveness check } }
+  /ready:
+    get:
+      tags: [Health]
+      security: []
+      responses:
+        '200': { description: Ready }
+        '503': { $ref: '#/components/responses/NotReady' }
+  /api/auth/register:
+    post:
+      tags: [Authentication]
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterRequest' } } } }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/auth/login:
+    post:
+      tags: [Authentication]
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginRequest' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/AuthSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/refresh:
+    post:
+      tags: [Authentication]
+      security: []
+      description: Rotates the HttpOnly refresh-token cookie and returns a new access token.
+      responses:
+        '200': { $ref: '#/components/responses/RefreshSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/logout:
+    post:
+      tags: [Authentication]
+      security: []
+      responses:
+        '200': { description: Session revoked and cookie cleared }
+  /api/auth/logout-all:
+    post:
+      tags: [Authentication]
+      responses:
+        '200': { description: All sessions revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/me:
+    get:
+      tags: [Authentication]
+      responses:
+        '200': { $ref: '#/components/responses/UserSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/rooms:
+    get:
+      tags: [Rooms]
+      responses: { '200': { $ref: '#/components/responses/RoomsSuccess' } }
+    post:
+      tags: [Rooms]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateRoomRequest' } } } }
+      responses:
+        '201': { $ref: '#/components/responses/RoomSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/rooms/{identifier}:
+    get:
+      tags: [Rooms]
+      parameters: [{ $ref: '#/components/parameters/Identifier' }]
+      responses:
+        '200': { $ref: '#/components/responses/RoomSuccess' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Rooms]
+      parameters: [{ $ref: '#/components/parameters/Identifier' }]
+      responses:
+        '200': { description: Room deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/rooms/{roomCode}/join:
+    post:
+      tags: [Rooms]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses:
+        '200': { $ref: '#/components/responses/RoomSuccess' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/rooms/{roomCode}/leave:
+    post:
+      tags: [Rooms]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      responses: { '200': { description: Left room } }
+  /api/rooms/{roomCode}/members/{userId}/role:
+    patch:
+      tags: [Rooms]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RoleRequest' } } } }
+      responses:
+        '200': { description: Role updated }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/transfer:
+    post:
+      tags: [Rooms]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TransferRequest' } } } }
+      responses:
+        '200': { description: Ownership transferred }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/history:
+    get:
+      tags: [History]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: Revision list }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      tags: [History]
+      parameters: [{ $ref: '#/components/parameters/RoomCode' }]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/RevisionRequest' } } } }
+      responses:
+        '201': { description: Checkpoint created }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/rooms/{roomCode}/history/diff:
+    get:
+      tags: [History]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: from, in: query, required: true, schema: { type: string } }
+        - { name: to, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Revision comparison }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/rooms/{roomCode}/history/{revisionId}/restore:
+    post:
+      tags: [History]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: revisionId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Revision restored }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/messages/room/{roomCode}:
+    get:
+      tags: [Messages]
+      parameters:
+        - { $ref: '#/components/parameters/RoomCode' }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: Paginated room messages }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/execute:
+    post:
+      tags: [Execution]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ExecuteRequest' } } } }
+      responses:
+        '200': { description: Execution result }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '408': { description: Execution timed out }
+        '429': { description: Rate limit exceeded }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    RoomCode: { name: roomCode, in: path, required: true, schema: { type: string, pattern: '^[A-Z0-9]{6}$' } }
+    Identifier: { name: identifier, in: path, required: true, schema: { type: string } }
+  schemas:
+    User:
+      type: object
+      required: [id, name, email]
+      properties:
+        id: { type: string }
+        name: { type: string, maxLength: 50 }
+        email: { type: string, format: email }
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 50 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6, maxLength: 128, format: password }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6, maxLength: 128, format: password }
+    CreateRoomRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 50 }
+        language: { type: string }
+        description: { type: string, maxLength: 200 }
+    RoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [editor, viewer] }
+    TransferRequest:
+      type: object
+      required: [newOwnerId]
+      properties:
+        newOwnerId: { type: string }
+    RevisionRequest:
+      type: object
+      properties:
+        content: { type: string, maxLength: 524288 }
+        language: { type: string }
+        message: { type: string, maxLength: 120 }
+    ExecuteRequest:
+      type: object
+      required: [source_code, language, roomCode]
+      properties:
+        source_code: { type: string, maxLength: 524288 }
+        language: { type: string }
+        stdin: { type: string, maxLength: 10000 }
+        roomCode: { type: string, pattern: '^[A-Z0-9]{6}$' }
+    ApiError:
+      type: object
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          properties:
+            message: { type: string }
+            requestId: { type: string }
+  responses:
+    AuthSuccess: { description: Authenticated session created, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/User' }, token: { type: string } } } } } }
+    RefreshSuccess: { description: New access token; refresh token rotates in HttpOnly cookie, content: { application/json: { schema: { type: object, properties: { token: { type: string } } } } } }
+    UserSuccess: { description: Current user, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/User' } } } } } }
+    RoomSuccess: { description: Room payload, content: { application/json: { schema: { type: object, properties: { room: { type: object } } } } } }
+    RoomsSuccess: { description: Room list, content: { application/json: { schema: { type: object, properties: { rooms: { type: array, items: { type: object } } } } } } }
+    BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+    Unauthorized: { description: Authentication required or invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+    Forbidden: { description: Insufficient permission, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+    NotFound: { description: Resource not found, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+    Conflict: { description: Resource conflict, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }
+    NotReady: { description: Service dependency not ready, content: { application/json: { schema: { $ref: '#/components/schemas/ApiError' } } } }

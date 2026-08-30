@@ -10,6 +10,7 @@ const logger = require('./utils/logger');
 const authRoutes = require('./routes/authRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const revisionRoutes = require('./routes/revisionRoutes');
+const interviewRoutes = require('./routes/interviewRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const executeRoutes = require('./routes/executeRoutes');
 const openApiRoutes = require('./routes/openApiRoutes');
@@ -58,12 +59,7 @@ app.use(requestLogger);
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'pairpad-backend',
-    uptime: process.uptime(),
-    scaling: isSocketScalingEnabled() ? 'redis' : 'single-node',
-  });
+  res.json({ status: 'ok', service: 'pairpad-backend', uptime: process.uptime(), scaling: isSocketScalingEnabled() ? 'redis' : 'single-node' });
 });
 
 app.get('/ready', async (_req, res) => {
@@ -80,6 +76,7 @@ app.use('/api', apiLimiter);
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/rooms', revisionRoutes);
+app.use('/api/rooms', interviewRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/execute', executeLimiter, executeRoutes);
 app.use('/api', openApiRoutes);

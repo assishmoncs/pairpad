@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
@@ -18,13 +18,15 @@ const FullPageState = ({ title, children }) => (
 
 const SessionUnavailable = () => {
   const { authError, refreshUser, logout } = useAuth();
-  return <FullPageState title="Session temporarily unavailable">
-    <p>{authError || 'We could not load your account right now.'}</p>
-    <div className="app-state-actions">
-      <button type="button" onClick={refreshUser} className="btn-primary">Try again</button>
-      <button type="button" onClick={logout} className="btn-secondary">Logout</button>
-    </div>
-  </FullPageState>;
+  return (
+    <FullPageState title="Session temporarily unavailable">
+      <p>{authError || 'We could not load your account right now.'}</p>
+      <div className="app-state-actions">
+        <button type="button" onClick={refreshUser} className="btn-primary">Try again</button>
+        <button type="button" onClick={logout} className="btn-secondary">Logout</button>
+      </div>
+    </FullPageState>
+  );
 };
 
 const ProtectedRoute = ({ children }) => {
@@ -36,15 +38,33 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const AccessibleRouteContent = ({ children }) => {
+  const location = useLocation();
+  React.useEffect(() => {
+    document.getElementById('main-content')?.focus();
+  }, [location.pathname]);
+
+  return (
+    <>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <div id="main-content" tabIndex="-1" className="route-content">
+        {children}
+      </div>
+    </>
+  );
+};
+
 const AppRoutes = () => (
-  <Routes>
-    <Route path="/login" element={<Login />} />
-    <Route path="/register" element={<Register />} />
-    <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-    <Route path="/room/:roomCode" element={<ProtectedRoute><Room /></ProtectedRoute>} />
-    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-    <Route path="*" element={<NotFound />} />
-  </Routes>
+  <AccessibleRouteContent>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/room/:roomCode" element={<ProtectedRoute><Room /></ProtectedRoute>} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  </AccessibleRouteContent>
 );
 
 export default AppRoutes;

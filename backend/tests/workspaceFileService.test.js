@@ -1,6 +1,5 @@
 const workspaceFileService = require('../src/services/workspaceFileService');
 const WorkspaceFile = require('../src/models/WorkspaceFile');
-const mongoose = require('mongoose');
 
 jest.mock('../src/models/WorkspaceFile');
 
@@ -17,8 +16,8 @@ describe('workspaceFileService', () => {
 
   it('validateFilePath', () => {
     expect(workspaceFileService.validateFilePath('valid.js')).toBe('valid.js');
-    try { workspaceFileService.validateFilePath('../invalid.js'); } catch {}
-    try { workspaceFileService.validateFilePath('a'.repeat(300)); } catch {}
+    try { workspaceFileService.validateFilePath('../invalid.js'); } catch { /* ignore */ }
+    try { workspaceFileService.validateFilePath('a'.repeat(300)); } catch { /* ignore */ }
   });
 
   it('listFiles', async () => {
@@ -44,17 +43,22 @@ describe('workspaceFileService', () => {
     WorkspaceFile.create.mockResolvedValue({ _id: '1', toObject: () => ({ _id: '1' }) });
     WorkspaceFile.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
 
-    await workspaceFileService.createFile('room1', 'f1.js', 'js', 'content', 'u1');
+    await workspaceFileService.createFile({ _id: 'room1' }, 'u1', { name: 'f1.js', content: 'content', language: 'javascript' });
     expect(WorkspaceFile.create).toHaveBeenCalled();
   });
 
   it('renameFile', async () => {
-    const mockLean = jest.fn().mockResolvedValue({ _id: '1' });
-    WorkspaceFile.findOneAndUpdate = jest.fn().mockReturnValue({ lean: mockLean });
-    WorkspaceFile.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    const mockFile = {
+      save: jest.fn().mockResolvedValue(true),
+      toObject: () => ({ _id: '1' }),
+      language: 'javascript',
+    };
+    WorkspaceFile.findOne
+      .mockResolvedValueOnce(mockFile)
+      .mockReturnValueOnce({ lean: jest.fn().mockResolvedValue(null) });
 
-    await workspaceFileService.renameFile('room1', 'f1.js', 'newF.js', 'u1');
-    expect(WorkspaceFile.findOneAndUpdate).toHaveBeenCalled();
+    await workspaceFileService.renameFile('room1', 'f1', 'newF.js');
+    expect(mockFile.save).toHaveBeenCalled();
   });
 
   it('deleteFile', async () => {

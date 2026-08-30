@@ -19,7 +19,7 @@ describe('Server', () => {
     if (app.close) {
       try {
         app.close(done);
-      } catch (e) {
+      } catch {
         done();
       }
     } else {

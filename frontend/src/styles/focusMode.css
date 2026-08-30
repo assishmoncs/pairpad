@@ -1,0 +1,14 @@
+.room-page.focus-mode .room-sidebar {
+  display: none;
+}
+
+.room-page.focus-mode .editor-section {
+  width: 100%;
+}
+
+.room-page.focus-mode .room-header .header-left h1 {
+  max-width: 32vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

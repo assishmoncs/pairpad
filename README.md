@@ -29,6 +29,7 @@ PairPad is a full-stack collaborative coding platform built around Monaco Editor
 | **Code Execution** | Judge0 integration with guarded local JS/TS/Python fallback |
 | **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement |
 | **Resilience** | Socket reconnection, room rejoin, CRDT state recovery, document restore propagation, health/readiness probes |
+| **Observability** | Structured request logs, request IDs, latency counters, status-class counters, and protected Prometheus metrics |
 
 ## Room roles
 
@@ -52,7 +53,7 @@ PairPad persists immutable document checkpoints separately from the live CRDT st
 | **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet |
 | **Collaboration** | Dependency-free sequence CRDT over authenticated Socket.IO transport |
 | **Code Execution** | Judge0 CE · guarded local Node.js / Python fallback |
-| **Testing** | Jest + Supertest · Vitest + Testing Library |
+| **Testing** | Jest + Supertest · Vitest + Testing Library · Playwright |
 | **Tooling** | ESLint + Prettier · GitHub Actions · CodeQL · Dependabot |
 
 ## Quick Start
@@ -72,7 +73,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Backend: `http://localhost:5000` · health: `GET /health`.
+Backend: `http://localhost:5000` · health: `GET /health` · readiness: `GET /ready` · metrics: `GET /metrics`.
 
 ### Frontend
 
@@ -94,7 +95,11 @@ The Compose stack includes MongoDB, backend, and frontend, with health checks an
 
 ## Environment Variables
 
-See `backend/.env.example` for the complete configuration. Production must keep `ALLOW_LOCAL_EXECUTION` unset and use a fully isolated execution service.
+See `backend/.env.example` for the complete configuration. Production must keep `ALLOW_LOCAL_EXECUTION` unset and use a fully isolated execution service. Set `METRICS_TOKEN` to protect the Prometheus-compatible `/metrics` endpoint.
+
+## Operational Metrics
+
+The backend exposes `/metrics` in Prometheus text format with process uptime, in-flight requests, completed requests, average request duration, total request count, method counters, and status-class counters. In production, the endpoint returns `404` unless a valid `METRICS_TOKEN` is supplied using either `X-Metrics-Token` or `Authorization: Bearer ...`.
 
 ## Project Structure
 
@@ -107,8 +112,7 @@ pairpad/
 │   │   ├── models/          # User, Room, Message, Revision
 │   │   ├── routes/          # REST routes
 │   │   ├── services/        # Execution, CRDT, revision services
-│   │   ├── sockets/         # Socket.IO + CRDT collaboration
-│   │   └── utils/           # Validation, auth, access, logging
+│   │   └── utils/            # Validation, auth, access, logging, metrics
 │   └── tests/
 ├── frontend/
 │   └── src/
@@ -159,12 +163,13 @@ pairpad/
 | POST | `/api/rooms/:roomCode/history` | Editor/Owner | Create manual checkpoint |
 | POST | `/api/rooms/:roomCode/history/:revisionId/restore` | Owner | Restore a revision |
 
-### Health
+### Health & Operations
 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/health` | Liveness |
-| GET | `/ready` | MongoDB readiness |
+| GET | `/ready` | MongoDB / Redis readiness |
+| GET | `/metrics` | Prometheus-compatible operational metrics; protected in production |
 
 ### Messages & Execution
 
@@ -205,9 +210,9 @@ All connections require an authenticated JWT handshake. Room membership is check
 
 ## Testing
 
-Backend: `npm test` · frontend: `npm test` / `npm run test:coverage`.
+Backend: `npm test` · frontend: `npm test` / `npm run test:coverage` · browser: `npx playwright test`.
 
-Focused suites cover CRDT convergence, RBAC, revision schema/checkpoint policy, cursors, and room member management. Full application/E2E verification should be run in CI or a clean environment with dependencies installed.
+Focused suites cover CRDT convergence, RBAC, revision schema/checkpoint policy, cursors, room member management, execution isolation, and security flows. Full E2E verification runs against MongoDB and Redis in CI.
 
 ## Quality Roadmap
 
@@ -217,14 +222,16 @@ Focused suites cover CRDT convergence, RBAC, revision schema/checkpoint policy, 
 - [x] Remote Monaco cursors and presence cleanup
 - [x] Owner/editor/viewer authorization
 - [x] Revision history, comparison, checkpoints, and restore
-- [ ] Rotating refresh-token sessions / hardened cookies
-- [ ] Redis-backed horizontal Socket.IO scaling
-- [ ] Isolated execution workers and Docker sandboxing
-- [ ] Playwright E2E and adversarial security suites
-- [ ] OpenAPI contract
+- [x] Rotating refresh-token sessions / hardened cookies
+- [x] Redis-backed horizontal Socket.IO scaling
+- [x] Isolated execution worker integration
+- [x] Playwright E2E and adversarial security suites
+- [x] OpenAPI contract
 - [ ] Interview mode with hidden test cases
-- [ ] Multi-file workspace
-- [ ] Observability, performance, and accessibility gates
+- [x] Multi-file workspace
+- [x] Observability baseline
+- [ ] Performance budgets and load-test gates
+- [ ] Accessibility automated gate
 
 See `docs/RBAC.md`, `docs/system-design.md`, `docs/DEPLOYMENT.md`, and `docs/QUALITY_BASELINE.md`.
 

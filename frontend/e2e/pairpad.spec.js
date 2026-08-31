@@ -80,14 +80,10 @@ test.describe('PairPad collaboration smoke flow', () => {
     await ownerRoomResponse;
     await expect(owner).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
 
-    // Explicitly wait for the WebSocket / Socket.IO connection handshake to be fully established and stable
     await expect(owner.locator('.status-dot.connected')).toBeVisible({ timeout: 30000 });
     await expect(owner.getByText('Connected')).toBeVisible({ timeout: 30000 });
-
-    // Verify room heading using robust text selector
     await expect(owner.getByText('E2E Collaboration Room', { exact: true })).toBeVisible({ timeout: 30000 });
 
-    // Now navigate the secondary user (collaborator) into the room
     const joinRoomBtn = collaborator.getByRole('button', { name: 'Join Room' });
     await expect(joinRoomBtn).toBeVisible();
     await joinRoomBtn.click();
@@ -106,11 +102,8 @@ test.describe('PairPad collaboration smoke flow', () => {
     await collabRoomResponse;
     await expect(collaborator).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
 
-    // Ensure the collaborator's WebSocket connection handshake is also fully established
     await expect(collaborator.locator('.status-dot.connected')).toBeVisible({ timeout: 30000 });
     await expect(collaborator.getByText('Connected')).toBeVisible({ timeout: 30000 });
-
-    // Verify collaborator room heading using robust text selector
     await expect(collaborator.getByText('E2E Collaboration Room', { exact: true })).toBeVisible({ timeout: 30000 });
 
     const newFileInput = owner.getByLabel('New file path', { exact: true });
@@ -134,9 +127,9 @@ test.describe('PairPad collaboration smoke flow', () => {
     await ownerEditor.click();
     await owner.keyboard.type('console.log("shared");');
 
-    const collaboratorEditor = collaborator.locator('.monaco-editor .view-lines').last();
+    const collaboratorEditor = collaborator.locator('.monaco-editor').last();
     await expect(collaboratorEditor).toBeVisible({ timeout: 30000 });
-    await expect(collaboratorEditor.getByText('console.log', { exact: false })).toBeVisible({ timeout: 30000 });
+    await expect(collaboratorEditor).toContainText('console.log', { timeout: 30000 });
     await expect(collaboratorEditor).toContainText('shared', { timeout: 30000 });
 
     await ownerContext.close();

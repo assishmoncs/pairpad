@@ -11,12 +11,29 @@ const roomMemberSchema = new mongoose.Schema(
 
 const roomSchema = new mongoose.Schema(
   {
-    name: { type: String, required: [true, 'Room name is required'], trim: true, minlength: 1, maxlength: 50 },
-    roomCode: { type: String, required: true, unique: true, uppercase: true, trim: true, match: [/^[A-Z0-9]{6}$/, 'Room code must be 6 alphanumeric characters'] },
+    name: {
+      type: String,
+      required: [true, 'Room name is required'],
+      trim: true,
+      minlength: 1,
+      maxlength: 50,
+    },
+    roomCode: {
+      type: String,
+      required: true,
+      unique: true,
+      uppercase: true,
+      trim: true,
+      match: [/^[A-Z0-9]{6}$/, 'Room code must be 6 alphanumeric characters'],
+    },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     memberRoles: { type: [roomMemberSchema], default: [] },
-    language: { type: String, default: 'javascript', enum: ['javascript', 'python', 'java', 'cpp', 'c', 'go', 'rust', 'typescript', 'php', 'ruby'] },
+    language: {
+      type: String,
+      default: 'javascript',
+      enum: ['javascript', 'python', 'java', 'cpp', 'c', 'go', 'rust', 'typescript', 'php', 'ruby'],
+    },
     description: { type: String, trim: true, maxlength: [200, 'Description cannot exceed 200 characters'] },
     snapshotCode: { type: String, default: '', maxlength: 524288 },
     crdtState: { type: String, default: '', maxlength: 4194304 },
@@ -25,17 +42,23 @@ const roomSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-roomSchema.pre('save', function (next) {
+roomSchema.pre('save', function () {
   const ownerId = this.owner?.toString();
   const roles = new Map((this.memberRoles || []).map((entry) => [entry.user.toString(), entry.role]));
-  if (!this.members.some((memberId) => memberId.toString() === ownerId)) this.members.push(this.owner);
+
+  if (!this.members.some((memberId) => memberId.toString() === ownerId)) {
+    this.members.push(this.owner);
+  }
+
   for (const memberId of this.members || []) {
     const id = memberId.toString();
-    if (!roles.has(id)) this.memberRoles.push({ user: memberId, role: id === ownerId ? 'owner' : 'editor' });
+    if (!roles.has(id)) {
+      this.memberRoles.push({ user: memberId, role: id === ownerId ? 'owner' : 'editor' });
+    }
   }
+
   const ownerRole = this.memberRoles.find((entry) => entry.user.toString() === ownerId);
   if (ownerRole) ownerRole.role = 'owner';
-  next();
 });
 
 roomSchema.index({ members: 1, createdAt: -1 });

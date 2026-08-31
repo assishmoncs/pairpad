@@ -109,7 +109,14 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard">
-      <header className="dashboard-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <header
+        className="dashboard-header"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
           <Logo size={36} />
           <h1 style={{ margin: 0 }}>Welcome, {user?.name}!</h1>

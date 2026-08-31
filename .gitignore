@@ -32,6 +32,10 @@ pids/
 *.sqlite
 *.sqlite3
 
+# Test / CI reports
+test-results.json
+backend-test-results.json
+
 # IDEs and editors
 .vscode/
 .idea/

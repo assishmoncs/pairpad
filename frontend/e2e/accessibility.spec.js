@@ -57,6 +57,7 @@ test.describe('accessibility gates', () => {
   test('keyboard focus is visibly styled for primary controls', async ({ page }) => {
     await page.goto('/login', { waitUntil: 'networkidle' });
     const loginButton = page.getByRole('button', { name: 'Login' });
+    await expect(loginButton).toBeVisible();
     await loginButton.focus();
 
     const focusStyles = await loginButton.evaluate((element) => {

@@ -38,7 +38,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^17.9.0",
-    "jsdom": "^24.1.1",
+    "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "vite": "^5.4.21",
     "vitest": "^2.1.9"

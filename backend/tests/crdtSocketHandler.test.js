@@ -57,13 +57,11 @@ describe('crdtSocketHandler', () => {
 
     const syncHandler = socket.on.mock.calls.find((c) => c[0] === 'crdt-sync-request')[1];
 
-    // Case 1: unauthorized room
     roomAccess.findRoomByCode.mockResolvedValueOnce(null);
     const cb1 = jest.fn();
     await syncHandler({}, cb1);
     expect(cb1).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
 
-    // Case 2: valid room without file
     const mockRoom = {
       _id: 'r1',
       roomCode: 'ROOM1',
@@ -76,13 +74,11 @@ describe('crdtSocketHandler', () => {
     await syncHandler({}, cb2);
     expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
-    // Case 3: with file not found
     WorkspaceFile.findOne.mockResolvedValueOnce(null);
     const cb3 = jest.fn();
     await syncHandler({ fileId: 'f_missing' }, cb3);
     expect(cb3).toHaveBeenCalledWith(expect.objectContaining({ error: 'Workspace file not found.' }));
 
-    // Case 4: with file found
     WorkspaceFile.findOne.mockResolvedValue({ _id: 'f1', room: 'r1', snapshotCode: 'code', language: 'javascript' });
     const cb4 = jest.fn();
     await syncHandler({ fileId: 'f1' }, cb4);
@@ -114,23 +110,19 @@ describe('crdtSocketHandler', () => {
     };
     roomAccess.findRoomByCode.mockResolvedValue(mockRoom);
 
-    // Case 1: unpermitted
     roomPermissions.canEdit.mockReturnValueOnce(false);
     const cb1 = jest.fn();
     await opHandler({ type: 'replace' }, cb1);
     expect(cb1).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
 
-    // Case 2: invalid op type
     const cb2 = jest.fn();
     await opHandler({ type: 'invalid' }, cb2);
     expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
 
-    // Case 3: valid replace op local
     const cb3 = jest.fn();
     await opHandler({ type: 'replace', inserts: [], deletes: [] }, cb3);
     expect(cb3).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
-    // Case 4: valid replace op redis atomic
     redisService.isRedisReady.mockReturnValue(true);
     redisDocState.applyOperationAtomic.mockResolvedValueOnce({
       state: 'nodes',
@@ -141,14 +133,59 @@ describe('crdtSocketHandler', () => {
     await opHandler({ type: 'replace', inserts: [], deletes: [], fileId: 'f1' }, cb4);
     expect(cb4).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
-    // Case 5: fileId with missing file
     WorkspaceFile.findOne.mockResolvedValueOnce(null);
     const cb5 = jest.fn();
     await opHandler({ type: 'replace', fileId: 'missing' }, cb5);
     expect(cb5).toHaveBeenCalledWith(expect.objectContaining({ error: 'Workspace file not found.' }));
 
-    // Disconnect event
     const discHandler = socket.on.mock.calls.find((c) => c[0] === 'disconnect')[1];
     discHandler();
+  });
+
+  it('serializes concurrent Redis CRDT operations for the same document', async () => {
+    const io = { on: jest.fn() };
+    crdtSocketHandler.initializeCrdtSocket(io);
+    const connectCb = io.on.mock.calls.find((c) => c[0] === 'connection')[1];
+    const socket = {
+      on: jest.fn(),
+      currentRoom: 'ROOM2',
+      user: { _id: 'u1' },
+      emit: jest.fn(),
+      to: jest.fn().mockReturnThis(),
+    };
+    connectCb(socket);
+
+    const opHandler = socket.on.mock.calls.find((c) => c[0] === 'crdt-operation')[1];
+    roomAccess.findRoomByCode.mockResolvedValue({
+      _id: 'r2',
+      roomCode: 'ROOM2',
+      owner: 'u1',
+      members: ['u1'],
+      snapshotCode: '',
+    });
+    redisService.isRedisReady.mockReturnValue(true);
+
+    const order = [];
+    let running = 0;
+    let maxRunning = 0;
+    redisDocState.applyOperationAtomic.mockImplementation(async (key, operation) => {
+      running += 1;
+      maxRunning = Math.max(maxRunning, running);
+      order.push(operation.opId);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      running -= 1;
+      return { state: '{"version":1,"nodes":[]}', changed: true, text: '' };
+    });
+
+    const firstCb = jest.fn();
+    const secondCb = jest.fn();
+    const first = opHandler({ type: 'replace', opId: 'first', insert: [], deleteIds: [], fileId: 'f1' }, firstCb);
+    const second = opHandler({ type: 'replace', opId: 'second', insert: [], deleteIds: [], fileId: 'f1' }, secondCb);
+    await Promise.all([first, second]);
+
+    expect(maxRunning).toBe(1);
+    expect(order).toEqual(['first', 'second']);
+    expect(firstCb).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    expect(secondCb).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });

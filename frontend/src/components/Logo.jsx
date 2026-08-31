@@ -51,7 +51,14 @@ const Logo = ({ src, size = 32, showText = true, className = '' }) => {
           <circle cx="44" cy="50" r="6" fill="#10B981" />
           <circle cx="56" cy="50" r="6" fill="#3B82F6" />
           <defs>
-            <linearGradient id="logo-grad" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+            <linearGradient
+              id="logo-grad"
+              x1="0"
+              y1="0"
+              x2="100"
+              y2="100"
+              gradientUnits="userSpaceOnUse"
+            >
               <stop stopColor="#6366F1" />
               <stop offset="1" stopColor="#4F46E5" />
             </linearGradient>

@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const logger = require('../utils/logger');
 const {
   issueSession,
   rotate,
@@ -49,6 +50,7 @@ const register = async (req, res) => {
     const user = await User.create({ name: name.trim(), email: normalizedEmail, password });
     return authenticate(req, res, user, 201);
   } catch (error) {
+    logger.error('Registration error', { name: error.name, message: error.message });
     if (error.name === 'ValidationError') return sendValidationError(res, error);
     return sendError(res, 500, 'Registration failed. Please try again.');
   }
@@ -61,7 +63,8 @@ const login = async (req, res) => {
     const user = await User.findOne({ email: email.trim().toLowerCase() }).select('+password');
     if (!user || !(await user.comparePassword(password))) return sendError(res, 401, 'Invalid email or password.');
     return authenticate(req, res, user);
-  } catch {
+  } catch (error) {
+    logger.error('Login error', { name: error.name, message: error.message });
     return sendError(res, 500, 'Login failed. Please try again.');
   }
 };
@@ -108,4 +111,3 @@ module.exports = {
   getMe,
   getRefreshCookieName,
 };
-

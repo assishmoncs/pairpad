@@ -105,7 +105,11 @@ export default function WorkspaceFilesPanel({
     try {
       const response = await axios.post(`/api/rooms/${roomCode}/files`, { path: newPath.trim() });
       const file = response.data.data.file;
-      setFiles((current) => [...current, file].sort((a, b) => a.path.localeCompare(b.path)));
+      setFiles((current) =>
+        [...current.filter((entry) => String(entry._id) !== String(file._id)), file].sort((a, b) =>
+          a.path.localeCompare(b.path)
+        )
+      );
       setNewPath('');
       onSelectFile(file);
       onFileChanged?.(file);
@@ -201,6 +205,7 @@ export default function WorkspaceFilesPanel({
                     type="button"
                     className="workspace-file-select"
                     onClick={() => onSelectFile(file)}
+                    aria-label={`Open ${file.path}`}
                     aria-current={String(activeFileId) === String(file._id) ? 'page' : undefined}
                   >
                     <span className="workspace-file-icon">{iconFor(file.path)}</span>

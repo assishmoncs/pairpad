@@ -121,10 +121,10 @@ test.describe('PairPad collaboration smoke flow', () => {
     await expect(addFileBtn).toBeVisible();
     await addFileBtn.click();
 
-    const ownerFileTab = owner.getByRole('button', { name: 'src/main.js' });
+    const ownerFileTab = owner.getByRole('button', { name: 'Open src/main.js' });
     await expect(ownerFileTab).toBeVisible({ timeout: 30000 });
 
-    const collabFileTab = collaborator.getByRole('button', { name: 'src/main.js' });
+    const collabFileTab = collaborator.getByRole('button', { name: 'Open src/main.js' });
     await expect(collabFileTab).toBeVisible({ timeout: 30000 });
     await collabFileTab.click();
     await expect(collaborator.getByText('src/main.js')).toBeVisible({ timeout: 30000 });

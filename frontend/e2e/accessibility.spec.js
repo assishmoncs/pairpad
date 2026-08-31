@@ -9,8 +9,12 @@ const auditPage = async (page, path) => {
 
   const unnamedInteractive = await page.locator('button, a, input, select, textarea').evaluateAll((nodes) => nodes
     .filter((node) => {
-      const accessibleName = node.getAttribute('aria-label') || node.getAttribute('aria-labelledby') || node.textContent?.trim() || node.getAttribute('title');
       if (node instanceof HTMLInputElement && node.type === 'hidden') return false;
+      const id = node.id;
+      const explicitLabel = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+      const wrappedLabel = node.closest('label');
+      const labelText = explicitLabel?.textContent?.trim() || wrappedLabel?.textContent?.trim();
+      const accessibleName = node.getAttribute('aria-label') || node.getAttribute('aria-labelledby') || labelText || node.textContent?.trim() || node.getAttribute('title');
       return !accessibleName;
     })
     .map((node) => `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}`));

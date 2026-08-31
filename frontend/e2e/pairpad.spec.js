@@ -6,7 +6,7 @@ async function register(page, name, email) {
   await page.goto('/register');
   await page.getByLabel('Name').fill(name);
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill('Password123!');
+  await page.getByLabel('Password', { exact: true }).fill('Password123!');
   const confirm = page.getByLabel(/Confirm Password/i);
   if (await confirm.count()) await confirm.fill('Password123!');
   await page.getByRole('button', { name: /register/i }).click();
@@ -66,7 +66,7 @@ test.describe('PairPad collaboration smoke flow', () => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: /Login to PairPad/i })).toBeVisible();
     await page.getByLabel('Email').fill('missing@example.com');
-    await page.getByLabel('Password').fill('wrong-password');
+    await page.getByLabel('Password', { exact: true }).fill('wrong-password');
     await page.getByRole('button', { name: /login/i }).click();
     await expect(page.getByText(/Login failed|Invalid|failed/i)).toBeVisible({ timeout: 5000 });
   });

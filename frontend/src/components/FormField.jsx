@@ -3,11 +3,15 @@ import React from 'react';
 /** Labelled input inside the shared `.form-group` wrapper. */
 const FormField = ({ id, label, type = 'text', value, onChange, rightElement, ...inputProps }) => (
   <div className="form-group">
-    <label htmlFor={id}>{label}</label>
+    <label htmlFor={id} id={`${id}-label`}>
+      {label}
+    </label>
     <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
       <input
         type={type}
         id={id}
+        aria-label={label}
+        aria-labelledby={`${id}-label`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         {...inputProps}

@@ -163,23 +163,31 @@ process.on('unhandledRejection', (reason) => {
 app.close = (cb) => {
   try {
     io.close();
-  } catch { /* ignore */ }
-  if (typeof cb === 'function') {
-    try {
-      server.close(() => cb());
-    } catch {
-      cb();
-    }
-  } else {
-    return new Promise((resolve) => {
-      try {
-        server.close(() => resolve());
-      } catch {
-        resolve();
-      }
-    });
+  } catch {
+    // Socket.IO may already be closed during test teardown.
   }
+
+  const finish = () => {
+    if (typeof cb === 'function') cb();
+  };
+
+  if (!server.listening) {
+    finish();
+    return Promise.resolve();
+  }
+
+  if (typeof cb === 'function') {
+    server.close(() => finish());
+    return undefined;
+  }
+
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+  });
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
 module.exports = app;

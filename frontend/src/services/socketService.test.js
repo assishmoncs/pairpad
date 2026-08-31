@@ -87,6 +87,35 @@ describe('SocketService', () => {
     await expect(promise).rejects.toThrow('Room not found.');
   });
 
+  it('auto-joins room before sending code changes when not yet joined', async () => {
+    socketService.connect('tok-1');
+    fakeSocket.connected = true;
+
+    const promise = socketService.sendCodeChange('console.log("shared")', 'javascript', 'abc123');
+
+    expect(fakeSocket.ackCallback.event).toBe('join-room');
+    fakeSocket.ackCallback.cb(null, { success: true, room: { roomCode: 'ABC123' } });
+
+    let emittedCodeChange = false;
+    for (let i = 0; i < 20; i++) {
+      if (fakeSocket.timeout.mock.calls.length > 1) {
+        emittedCodeChange = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(emittedCodeChange).toBe(true);
+    expect(fakeSocket.ackCallback.event).toBe('code-change');
+    expect(fakeSocket.ackCallback.payload).toEqual({
+      content: 'console.log("shared")',
+      language: 'javascript',
+    });
+
+    fakeSocket.ackCallback.cb(null, { success: true });
+    await expect(promise).resolves.toEqual({ success: true });
+  });
+
   it('subscribes and unsubscribes listeners', () => {
     const listener = vi.fn();
     const off = socketService.on('presence-update', listener);

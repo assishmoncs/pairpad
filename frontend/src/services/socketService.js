@@ -26,6 +26,7 @@ class SocketService {
     this.socket = null;
     this.connected = false;
     this.currentRoom = null;
+    this.joinRoomPromise = null;
     this.listeners = new Map();
   }
   connect(token) {
@@ -96,14 +97,16 @@ class SocketService {
     });
   }
   disconnect() {
-    if (!this.socket) return;
-    this.leaveRoom();
-    this.socket.removeAllListeners();
-    this.socket.disconnect();
-    this.socket = null;
-    this.connected = false;
-    this.currentRoom = null;
-    this.clearListeners();
+    if (this.socket) {
+      this.leaveRoom();
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
+      this.connected = false;
+      this.currentRoom = null;
+      this.joinRoomPromise = null;
+      this.clearListeners();
+    }
   }
   emitWithAck(event, payload, { requirement } = {}) {
     return new Promise((resolve, reject) => {
@@ -134,7 +137,24 @@ class SocketService {
       this.currentRoom = null;
     }
   }
-  sendCodeChange(content, language) {
+
+  /**
+   * Send code change to other room members.
+   * @param {string} content - Editor content
+   * @param {string} language - Programming language
+   * @param {string} [roomCode] - Room code to auto-join before sending
+   * @returns {Promise<object>}
+   */
+  async sendCodeChange(content, language, roomCode = this.currentRoom) {
+    if (!this.currentRoom && roomCode) {
+      if (!this.joinRoomPromise) {
+        this.joinRoomPromise = this.joinRoom(roomCode).finally(() => {
+          this.joinRoomPromise = null;
+        });
+      }
+      await this.joinRoomPromise;
+    }
+
     return this.emitWithAck(
       'code-change',
       { content, language },

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAsyncAction } from '../hooks/useAsyncAction';
 import FormField from '../components/FormField';
+import Logo from '../components/Logo';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -28,6 +29,9 @@ const Login = () => {
   return (
     <div className="auth-page">
       <div className="auth-container">
+        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+          <Logo size={48} />
+        </div>
         <h1>Login to PairPad</h1>
 
         {error && (

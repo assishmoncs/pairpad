@@ -9,6 +9,7 @@ import { appendUniqueMessage } from '../utils/messages';
 import { DEFAULT_LANGUAGE } from '../constants/languages';
 import LanguageSelect from '../components/LanguageSelect';
 import LoadingSpinner from '../components/LoadingSpinner';
+import Logo from '../components/Logo';
 import ChatPanel from '../components/ChatPanel';
 import ExecutionPanel from '../components/ExecutionPanel';
 import { useCollaboration } from '../hooks/useCollaboration';
@@ -247,12 +248,13 @@ const Room = () => {
   return (
     <div className="room-page">
       <header className="room-header">
-        <div className="header-left">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="btn-back"
-            aria-label="Back to Dashboard"
-          >
+    <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <Logo size={28} showText={false} />
+      <button 
+        onClick={() => navigate('/dashboard')} 
+        className="btn-secondary" 
+        aria-label="Back to Dashboard"
+      >
             ← Dashboard
           </button>
           <h1 className="room-title">{room?.name}</h1>

@@ -120,7 +120,7 @@ describe('crdtSocketHandler', () => {
     expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
 
     const cb3 = jest.fn();
-    await opHandler({ type: 'replace', insert: [], deleteIds: [] }, cb3);
+    await opHandler({ type: 'replace', inserts: [], deletes: [] }, cb3);
     expect(cb3).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
     redisService.isRedisReady.mockReturnValue(true);
@@ -130,13 +130,12 @@ describe('crdtSocketHandler', () => {
       text: 'updated',
     });
     const cb4 = jest.fn();
-    WorkspaceFile.findOne.mockResolvedValue({ _id: 'f1', room: 'r1', snapshotCode: 'code', language: 'javascript' });
-    await opHandler({ type: 'replace', insert: [], deleteIds: [], fileId: 'f1' }, cb4);
+    await opHandler({ type: 'replace', inserts: [], deletes: [], fileId: 'f1' }, cb4);
     expect(cb4).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
     WorkspaceFile.findOne.mockResolvedValueOnce(null);
     const cb5 = jest.fn();
-    await opHandler({ type: 'replace', insert: [], deleteIds: [], fileId: 'missing' }, cb5);
+    await opHandler({ type: 'replace', fileId: 'missing' }, cb5);
     expect(cb5).toHaveBeenCalledWith(expect.objectContaining({ error: 'Workspace file not found.' }));
 
     const discHandler = socket.on.mock.calls.find((c) => c[0] === 'disconnect')[1];

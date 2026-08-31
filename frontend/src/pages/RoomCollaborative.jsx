@@ -92,16 +92,17 @@ export default function RoomCollaborative() {
 
   useRemoteCursors(editor, collaboration.remoteCursors);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
       mounted.current = false;
       cursorDisposables.current.forEach((dispose) => dispose());
       if (cursorTimer.current) clearTimeout(cursorTimer.current);
-    },
-    []
-  );
+    };
+  }, []);
 
   const loadRoom = useCallback(async () => {
+    mounted.current = true;
     setError('');
     try {
       const response = await axios.get(`/api/rooms/${roomCode}`);
@@ -119,6 +120,7 @@ export default function RoomCollaborative() {
   }, [roomCode]);
 
   useEffect(() => {
+    mounted.current = true;
     loadRoom();
     return () => {
       collaboration.cleanupListeners();

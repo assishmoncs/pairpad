@@ -41,8 +41,11 @@ test.describe('PairPad collaboration smoke flow', () => {
   test('two users can create, join and edit a shared workspace', async ({ browser }) => {
     test.setTimeout(90000);
 
-    const owner = await browser.newPage();
-    const collaborator = await browser.newPage();
+    const ownerContext = await browser.newContext();
+    const collaboratorContext = await browser.newContext();
+
+    const owner = await ownerContext.newPage();
+    const collaborator = await collaboratorContext.newPage();
 
     const ownerEmail = unique('owner');
     const collaboratorEmail = unique('collaborator');
@@ -136,8 +139,8 @@ test.describe('PairPad collaboration smoke flow', () => {
     await expect(collaboratorEditor.getByText('console.log', { exact: false })).toBeVisible({ timeout: 30000 });
     await expect(collaboratorEditor).toContainText('shared', { timeout: 30000 });
 
-    await owner.close();
-    await collaborator.close();
+    await ownerContext.close();
+    await collaboratorContext.close();
   });
 
   test('login surfaces a useful error for invalid credentials', async ({ page }) => {

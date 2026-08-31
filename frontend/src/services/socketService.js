@@ -71,12 +71,14 @@ class SocketService {
     if (this.isConnected()) return Promise.resolve();
     return new Promise((resolve, reject) => {
       let settled = false;
+      let offError = () => {};
       const finish = (fn, arg) => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeoutId);
         offConnect();
         offDisconnect();
+        offError();
         fn(arg);
       };
       const timeoutId = window.setTimeout(
@@ -87,6 +89,9 @@ class SocketService {
       const offDisconnect = this.on('disconnect', ({ reason } = {}) => {
         if (reason === 'io server disconnect' || reason === 'io client disconnect')
           finish(reject, new Error(reason || 'Disconnected from collaboration server.'));
+      });
+      offError = this.on('connect_error', ({ error } = {}) => {
+        finish(reject, new Error(error || 'Connection error from collaboration server.'));
       });
     });
   }

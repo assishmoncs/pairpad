@@ -19,11 +19,24 @@ export const useCrdtCollaboration = ({
   const crdtRef = useRef(new TextCrdt(clientIdRef.current));
   const applyingRemoteRef = useRef(false);
   const initializedRef = useRef(false);
+  const pendingOperationsRef = useRef([]);
   const sendQueuesRef = useRef(new Map());
   const [crdtReady, setCrdtReady] = useState(false);
   const [crdtError, setCrdtError] = useState('');
 
   const emitText = useCallback((text) => onChange?.(text), [onChange]);
+  const applyRemoteOperation = useCallback(
+    (operation) => {
+      const changed = crdtRef.current.applyReplaceOperation(operation);
+      if (!changed) return false;
+      applyingRemoteRef.current = true;
+      emitText(crdtRef.current.getText());
+      applyingRemoteRef.current = false;
+      return true;
+    },
+    [emitText]
+  );
+
   const requestSync = useCallback(() => {
     const socket = socketService.socket;
     if (!socket?.connected || !socketService.getCurrentRoom()) return false;
@@ -41,6 +54,7 @@ export const useCrdtCollaboration = ({
     setCrdtReady(false);
     setCrdtError('');
     initializedRef.current = false;
+    pendingOperationsRef.current = [];
     crdtRef.current.resetFromState('');
 
     const attachSocketListeners = () => {
@@ -50,6 +64,8 @@ export const useCrdtCollaboration = ({
         if ((syncedFileId || null) !== (fileId || null) || initializedRef.current) return;
         initializedRef.current = true;
         crdtRef.current.resetFromState(state);
+        const pending = pendingOperationsRef.current.splice(0);
+        for (const operation of pending) applyRemoteOperation(operation);
         applyingRemoteRef.current = true;
         emitText(crdtRef.current.getText());
         applyingRemoteRef.current = false;
@@ -58,11 +74,11 @@ export const useCrdtCollaboration = ({
       };
       const handleOperation = (operation) => {
         if ((operation?.fileId || null) !== (fileId || null)) return;
-        const changed = crdtRef.current.applyReplaceOperation(operation);
-        if (!changed) return;
-        applyingRemoteRef.current = true;
-        emitText(crdtRef.current.getText());
-        applyingRemoteRef.current = false;
+        if (!initializedRef.current) {
+          pendingOperationsRef.current.push(operation);
+          return;
+        }
+        applyRemoteOperation(operation);
       };
       const handleRestore = ({
         state,
@@ -75,6 +91,7 @@ export const useCrdtCollaboration = ({
         if (!state)
           return setCrdtError('The restored document did not contain a valid collaborative state.');
         crdtRef.current.resetFromState(state);
+        pendingOperationsRef.current = [];
         initializedRef.current = true;
         applyingRemoteRef.current = true;
         emitText(typeof content === 'string' ? content : crdtRef.current.getText());
@@ -119,9 +136,10 @@ export const useCrdtCollaboration = ({
       unsubscribeConnect();
       cleanupSocket();
       initializedRef.current = false;
+      pendingOperationsRef.current = [];
       setCrdtReady(false);
     };
-  }, [enabled, room, roomCode, fileId, emitText, requestSync, onDocumentRestored]);
+  }, [enabled, room, roomCode, fileId, emitText, requestSync, onDocumentRestored, applyRemoteOperation]);
 
   const handleLocalChange = useCallback(
     async (nextText) => {

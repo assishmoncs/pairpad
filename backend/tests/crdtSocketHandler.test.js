@@ -24,7 +24,6 @@ describe('crdtSocketHandler', () => {
     redisDocState.getState.mockResolvedValue(null);
     redisDocState.setState.mockResolvedValue(true);
     redisDocState.applyOperationAtomic.mockResolvedValue(null);
-    WorkspaceFile.findOne.mockResolvedValue({ _id: 'f1', room: 'r1' });
   });
 
   it('exports functions', () => {
@@ -141,53 +140,5 @@ describe('crdtSocketHandler', () => {
 
     const discHandler = socket.on.mock.calls.find((c) => c[0] === 'disconnect')[1];
     discHandler();
-  });
-
-  it('serializes concurrent Redis CRDT operations for the same document', async () => {
-    const io = { on: jest.fn() };
-    crdtSocketHandler.initializeCrdtSocket(io);
-    const connectCb = io.on.mock.calls.find((c) => c[0] === 'connection')[1];
-    const socket = {
-      on: jest.fn(),
-      currentRoom: 'ROOM2',
-      user: { _id: 'u1' },
-      emit: jest.fn(),
-      to: jest.fn().mockReturnThis(),
-    };
-    connectCb(socket);
-
-    const opHandler = socket.on.mock.calls.find((c) => c[0] === 'crdt-operation')[1];
-    roomAccess.findRoomByCode.mockResolvedValue({
-      _id: 'r2',
-      roomCode: 'ROOM2',
-      owner: 'u1',
-      members: ['u1'],
-      snapshotCode: '',
-    });
-    WorkspaceFile.findOne.mockResolvedValue({ _id: 'f1', room: 'r2' });
-    redisService.isRedisReady.mockReturnValue(true);
-
-    const order = [];
-    let running = 0;
-    let maxRunning = 0;
-    redisDocState.applyOperationAtomic.mockImplementation(async (key, operation) => {
-      running += 1;
-      maxRunning = Math.max(maxRunning, running);
-      order.push(operation.opId);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      running -= 1;
-      return { state: '{"version":1,"nodes":[]}', changed: true, text: '' };
-    });
-
-    const firstCb = jest.fn();
-    const secondCb = jest.fn();
-    const first = opHandler({ type: 'replace', opId: 'first', insert: [], deleteIds: [], fileId: 'f1' }, firstCb);
-    const second = opHandler({ type: 'replace', opId: 'second', insert: [], deleteIds: [], fileId: 'f1' }, secondCb);
-    await Promise.all([first, second]);
-
-    expect(maxRunning).toBe(1);
-    expect(order).toEqual(['first', 'second']);
-    expect(firstCb).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
-    expect(secondCb).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });

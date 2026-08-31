@@ -19,6 +19,7 @@ export const useCrdtCollaboration = ({
   const crdtRef = useRef(new TextCrdt(clientIdRef.current));
   const applyingRemoteRef = useRef(false);
   const initializedRef = useRef(false);
+  const sendQueuesRef = useRef(new Map());
   const [crdtReady, setCrdtReady] = useState(false);
   const [crdtError, setCrdtError] = useState('');
 
@@ -131,17 +132,30 @@ export const useCrdtCollaboration = ({
       const socket = socketService.socket;
       if (!socket?.connected || !socketService.getCurrentRoom())
         return setCrdtError('Not connected to the collaboration server.');
+
+      const queueKey = fileId || '__legacy__';
+      const previous = sendQueuesRef.current.get(queueKey) || Promise.resolve();
+      const send = previous
+        .catch(() => undefined)
+        .then(
+          () =>
+            new Promise((resolve, reject) => {
+              socket.timeout(ACK_TIMEOUT_MS).emit('crdt-operation', operation, (ackError, response) => {
+                if (ackError) return reject(new Error('No acknowledgement from collaboration server.'));
+                if (response?.error) return reject(new Error(response.error));
+                resolve(response);
+              });
+            })
+        );
+      sendQueuesRef.current.set(queueKey, send);
+
       try {
-        await new Promise((resolve, reject) => {
-          socket.timeout(ACK_TIMEOUT_MS).emit('crdt-operation', operation, (ackError, response) => {
-            if (ackError) return reject(new Error('No acknowledgement from collaboration server.'));
-            if (response?.error) return reject(new Error(response.error));
-            resolve(response);
-          });
-        });
+        await send;
         setCrdtError('');
       } catch (error) {
         setCrdtError(error.message || 'Failed to synchronize collaborative edit.');
+      } finally {
+        if (sendQueuesRef.current.get(queueKey) === send) sendQueuesRef.current.delete(queueKey);
       }
     },
     [enabled, crdtReady, fileId]

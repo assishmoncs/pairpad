@@ -30,7 +30,13 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const ALLOWED_ORIGINS = (process.env.CLIENT_URL || 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean);
+const ALLOWED_ORIGINS = Array.from(
+  new Set([
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    ...(process.env.CLIENT_URL || '').split(',').map((origin) => origin.trim()).filter(Boolean),
+  ])
+);
 const METRICS_TOKEN = process.env.METRICS_TOKEN || '';
 
 const corsOptions = {

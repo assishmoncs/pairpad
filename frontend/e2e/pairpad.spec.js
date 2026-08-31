@@ -34,6 +34,7 @@ async function register(page, name, email) {
   await expect(registerBtn).toBeVisible();
   await registerBtn.click();
   await expect(page).toHaveURL(/dashboard/, { timeout: 15000 });
+  await expect(page.getByRole('button', { name: 'Create Room' })).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('PairPad collaboration smoke flow', () => {
@@ -66,10 +67,13 @@ test.describe('PairPad collaboration smoke flow', () => {
     const roomCode = await roomCard.locator('.room-code strong').textContent();
     expect(roomCode).toMatch(/^[A-Z0-9]{6}$/);
 
-    const openRoomBtn = owner.getByRole('button', { name: 'Open Room' });
+    const openRoomBtn = roomCard.getByRole('button', { name: 'Open Room' });
     await expect(openRoomBtn).toBeVisible();
     await openRoomBtn.click();
     await expect(owner).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
+
+    // Wait for room to initialize and render the header before asserting socket state
+    await expect(owner.getByRole('heading', { name: 'E2E Collaboration Room' })).toBeVisible({ timeout: 30000 });
 
     // Explicitly wait for the WebSocket / Socket.IO connection handshake to be fully established and stable
     await expect(owner.locator('.status-dot.connected')).toBeVisible({ timeout: 30000 });
@@ -88,6 +92,9 @@ test.describe('PairPad collaboration smoke flow', () => {
     await expect(submitJoinBtn).toBeVisible();
     await submitJoinBtn.click();
     await expect(collaborator).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
+
+    // Wait for collaborator's room to initialize and render the header
+    await expect(collaborator.getByRole('heading', { name: 'E2E Collaboration Room' })).toBeVisible({ timeout: 30000 });
 
     // Ensure the collaborator's WebSocket connection handshake is also fully established
     await expect(collaborator.locator('.status-dot.connected')).toBeVisible({ timeout: 30000 });

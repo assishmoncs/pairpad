@@ -25,6 +25,7 @@ export const useCrdtCollaboration = ({
   const [crdtError, setCrdtError] = useState('');
 
   const emitText = useCallback((text) => onChange?.(text), [onChange]);
+
   const applyRemoteOperation = useCallback(
     (operation) => {
       const changed = crdtRef.current.applyReplaceOperation(operation);
@@ -40,17 +41,21 @@ export const useCrdtCollaboration = ({
   const requestSync = useCallback(() => {
     const socket = socketService.socket;
     if (!socket?.connected || !socketService.getCurrentRoom()) return false;
+
     socket
       .timeout(ACK_TIMEOUT_MS)
       .emit('crdt-sync-request', { fileId: fileId || null }, (ackError, response) => {
-        if (ackError || response?.error)
+        if (ackError || response?.error) {
           setCrdtError(response?.error || 'Collaborative synchronization timed out.');
+        }
       });
+
     return true;
   }, [fileId]);
 
   useEffect(() => {
     if (!enabled || !room) return undefined;
+
     setCrdtReady(false);
     setCrdtError('');
     initializedRef.current = false;
@@ -60,18 +65,23 @@ export const useCrdtCollaboration = ({
     const attachSocketListeners = () => {
       const socket = socketService.socket;
       if (!socket) return () => {};
+
       const handleSync = ({ state, fileId: syncedFileId } = {}) => {
         if ((syncedFileId || null) !== (fileId || null) || initializedRef.current) return;
+
         initializedRef.current = true;
         crdtRef.current.resetFromState(state);
+
         const pending = pendingOperationsRef.current.splice(0);
         for (const operation of pending) applyRemoteOperation(operation);
+
         applyingRemoteRef.current = true;
         emitText(crdtRef.current.getText());
         applyingRemoteRef.current = false;
         setCrdtReady(true);
         setCrdtError('');
       };
+
       const handleOperation = (operation) => {
         if ((operation?.fileId || null) !== (fileId || null)) return;
         if (!initializedRef.current) {
@@ -80,6 +90,7 @@ export const useCrdtCollaboration = ({
         }
         applyRemoteOperation(operation);
       };
+
       const handleRestore = ({
         state,
         content,
@@ -88,8 +99,11 @@ export const useCrdtCollaboration = ({
         fileId: restoredFileId,
       } = {}) => {
         if ((restoredFileId || null) !== (fileId || null)) return;
-        if (!state)
-          return setCrdtError('The restored document did not contain a valid collaborative state.');
+        if (!state) {
+          setCrdtError('The restored document did not contain a valid collaborative state.');
+          return;
+        }
+
         crdtRef.current.resetFromState(state);
         pendingOperationsRef.current = [];
         initializedRef.current = true;
@@ -98,24 +112,37 @@ export const useCrdtCollaboration = ({
         applyingRemoteRef.current = false;
         setCrdtReady(true);
         setCrdtError('');
-        onDocumentRestored?.({ content, language, revisionId, fileId: restoredFileId || null });
+        onDocumentRestored?.({
+          content,
+          language,
+          revisionId,
+          fileId: restoredFileId || null,
+        });
       };
-      const handleError = ({ message } = {}) =>
+
+      const handleError = ({ message } = {}) => {
         setCrdtError(message || 'Collaborative synchronization failed.');
+      };
+
       socket.on('crdt-sync', handleSync);
       socket.on('crdt-operation', handleOperation);
       socket.on('document-restored', handleRestore);
       socket.on('crdt-error', handleError);
+
       const start = Date.now();
       let retryTimer = null;
       const tryRequest = () => {
         if (initializedRef.current) return;
         if (requestSync()) return;
-        if (Date.now() - start >= JOIN_SYNC_WAIT_MS)
-          return setCrdtError('Could not initialize collaborative editing for this file.');
+        if (Date.now() - start >= JOIN_SYNC_WAIT_MS) {
+          setCrdtError('Could not initialize collaborative editing for this file.');
+          return;
+        }
         retryTimer = window.setTimeout(tryRequest, JOIN_SYNC_RETRY_MS);
       };
+
       tryRequest();
+
       return () => {
         if (retryTimer) window.clearTimeout(retryTimer);
         socket.off('crdt-sync', handleSync);
@@ -130,8 +157,10 @@ export const useCrdtCollaboration = ({
       cleanupSocket();
       cleanupSocket = attachSocketListeners();
     };
+
     const unsubscribeConnect = socketService.on('connect', handleConnect);
     if (socketService.isConnected()) cleanupSocket = attachSocketListeners();
+
     return () => {
       unsubscribeConnect();
       cleanupSocket();
@@ -139,17 +168,30 @@ export const useCrdtCollaboration = ({
       pendingOperationsRef.current = [];
       setCrdtReady(false);
     };
-  }, [enabled, room, roomCode, fileId, emitText, requestSync, onDocumentRestored, applyRemoteOperation]);
+  }, [
+    enabled,
+    room,
+    roomCode,
+    fileId,
+    emitText,
+    requestSync,
+    onDocumentRestored,
+    applyRemoteOperation,
+  ]);
 
   const handleLocalChange = useCallback(
     async (nextText) => {
       if (!enabled || applyingRemoteRef.current || !crdtReady) return;
+
       const operation = crdtRef.current.replaceText(nextText);
       if (!operation) return;
       operation.fileId = fileId || null;
+
       const socket = socketService.socket;
-      if (!socket?.connected || !socketService.getCurrentRoom())
-        return setCrdtError('Not connected to the collaboration server.');
+      if (!socket?.connected || !socketService.getCurrentRoom()) {
+        setCrdtError('Not connected to the collaboration server.');
+        return;
+      }
 
       const queueKey = fileId || '__legacy__';
       const previous = sendQueuesRef.current.get(queueKey) || Promise.resolve();
@@ -158,13 +200,22 @@ export const useCrdtCollaboration = ({
         .then(
           () =>
             new Promise((resolve, reject) => {
-              socket.timeout(ACK_TIMEOUT_MS).emit('crdt-operation', operation, (ackError, response) => {
-                if (ackError) return reject(new Error('No acknowledgement from collaboration server.'));
-                if (response?.error) return reject(new Error(response.error));
-                resolve(response);
-              });
+              socket
+                .timeout(ACK_TIMEOUT_MS)
+                .emit('crdt-operation', operation, (ackError, response) => {
+                  if (ackError) {
+                    reject(new Error('No acknowledgement from collaboration server.'));
+                    return;
+                  }
+                  if (response?.error) {
+                    reject(new Error(response.error));
+                    return;
+                  }
+                  resolve(response);
+                });
             })
         );
+
       sendQueuesRef.current.set(queueKey, send);
 
       try {
@@ -173,7 +224,9 @@ export const useCrdtCollaboration = ({
       } catch (error) {
         setCrdtError(error.message || 'Failed to synchronize collaborative edit.');
       } finally {
-        if (sendQueuesRef.current.get(queueKey) === send) sendQueuesRef.current.delete(queueKey);
+        if (sendQueuesRef.current.get(queueKey) === send) {
+          sendQueuesRef.current.delete(queueKey);
+        }
       }
     },
     [enabled, crdtReady, fileId]
@@ -184,5 +237,10 @@ export const useCrdtCollaboration = ({
     if (fallbackText) emitText(fallbackText);
   }, [room, fallbackText, emitText]);
 
-  return { crdtReady, crdtError, handleLocalChange, clientId: clientIdRef.current };
+  return {
+    crdtReady,
+    crdtError,
+    handleLocalChange,
+    clientId: clientIdRef.current,
+  };
 };

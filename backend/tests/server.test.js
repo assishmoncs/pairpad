@@ -1,4 +1,5 @@
 process.env.JWT_SECRET = 'secret';
+process.env.PORT = '0';
 jest.mock('../src/config/db', () => jest.fn().mockResolvedValue(true));
 
 const request = require('supertest');
@@ -15,15 +16,9 @@ describe('Server', () => {
     process.env.METRICS_TOKEN = 'token123';
     await request(app).get('/metrics').set('x-metrics-token', 'token123').expect(200);
   });
-  afterAll((done) => {
-    if (app.close) {
-      try {
-        app.close(done);
-      } catch {
-        done();
-      }
-    } else {
-      done();
+  afterAll(async () => {
+    if (app && app.close) {
+      await app.close();
     }
   });
 });

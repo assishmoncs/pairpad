@@ -1,50 +1,154 @@
+jest.mock('../src/models/Room');
+jest.mock('../src/models/Revision');
+jest.mock('../src/models/WorkspaceFile');
+jest.mock('../src/utils/roomAccess');
+jest.mock('../src/utils/roomPermissions');
+jest.mock('../src/services/redisService');
+jest.mock('../src/services/redisDocumentState');
+
 const crdtSocketHandler = require('../src/sockets/crdtSocketHandler');
+const roomAccess = require('../src/utils/roomAccess');
+const roomPermissions = require('../src/utils/roomPermissions');
+const WorkspaceFile = require('../src/models/WorkspaceFile');
+const redisService = require('../src/services/redisService');
+const redisDocState = require('../src/services/redisDocumentState');
 
 describe('crdtSocketHandler', () => {
-  it('exports function', () => {
-    expect(typeof crdtSocketHandler.initializeCrdtSocket).toBe('function');
+  beforeEach(() => {
+    jest.clearAllMocks();
+    roomAccess.normalizeRoomCode.mockImplementation((code) => (code ? String(code).trim().toUpperCase() : ''));
+    roomAccess.getRoomRole.mockReturnValue('owner');
+    roomPermissions.canEdit.mockReturnValue(true);
+    roomPermissions.getMemberRole.mockReturnValue('owner');
+    redisService.isRedisReady.mockReturnValue(false);
+    redisDocState.getState.mockResolvedValue(null);
+    redisDocState.setState.mockResolvedValue(true);
+    redisDocState.applyOperationAtomic.mockResolvedValue(null);
   });
 
-  it('handles events', () => {
-    const io = {
-      on: jest.fn()
-    };
-    crdtSocketHandler.initializeCrdtSocket(io);
-    expect(io.on).toHaveBeenCalledWith('connection', expect.any(Function));
+  it('exports functions', () => {
+    expect(typeof crdtSocketHandler.initializeCrdtSocket).toBe('function');
+    expect(typeof crdtSocketHandler.replaceDocumentState).toBe('function');
+  });
 
-    const connectCb = io.on.mock.calls.find(c => c[0] === 'connection')[1];
-    
+  it('replaceDocumentState handles various inputs', () => {
+    expect(crdtSocketHandler.replaceDocumentState('', 'content')).toBeNull();
+    expect(crdtSocketHandler.replaceDocumentState('ROOM1', 123)).toBeNull();
+    const valid = crdtSocketHandler.replaceDocumentState('ROOM1', 'hello', 'f1');
+    expect(valid).toBeDefined();
+
+    redisService.isRedisReady.mockReturnValue(true);
+    crdtSocketHandler.replaceDocumentState('ROOM1', 'hello2');
+  });
+
+  it('handles crdt-sync-request with full coverage', async () => {
+    const io = { on: jest.fn() };
+    crdtSocketHandler.initializeCrdtSocket(io);
+    const connectCb = io.on.mock.calls.find((c) => c[0] === 'connection')[1];
+
     const socket = {
       on: jest.fn(),
       currentRoom: 'ROOM1',
       user: { _id: 'u1' },
       emit: jest.fn(),
-      to: jest.fn().mockReturnThis()
+      to: jest.fn().mockReturnThis(),
     };
     connectCb(socket);
 
-    const syncReq = socket.on.mock.calls.find(c => c[0] === 'crdt-sync-request');
-    if (syncReq) {
-      try { syncReq[1]({}, jest.fn()); } catch { /* ignore */ }
-      try { syncReq[1]({ fileId: 'f1' }, jest.fn()); } catch { /* ignore */ }
-    }
+    const syncHandler = socket.on.mock.calls.find((c) => c[0] === 'crdt-sync-request')[1];
 
-    const opReq = socket.on.mock.calls.find(c => c[0] === 'crdt-operation');
-    if (opReq) {
-      try { opReq[1]({ type: 'replace' }, jest.fn()); } catch { /* ignore */ }
-      try { opReq[1]({ type: 'insert', fileId: 'f1', content: 'x' }, jest.fn()); } catch { /* ignore */ }
-    }
+    // Case 1: unauthorized room
+    roomAccess.findRoomByCode.mockResolvedValueOnce(null);
+    const cb1 = jest.fn();
+    await syncHandler({}, cb1);
+    expect(cb1).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
 
-    const cursorReq = socket.on.mock.calls.find(c => c[0] === 'crdt-cursor');
-    if (cursorReq) {
-      try { cursorReq[1]({ position: 0 }); } catch { /* ignore */ }
-    }
+    // Case 2: valid room without file
+    const mockRoom = {
+      _id: 'r1',
+      roomCode: 'ROOM1',
+      owner: 'u1',
+      members: ['u1'],
+      snapshotCode: 'hello',
+    };
+    roomAccess.findRoomByCode.mockResolvedValue(mockRoom);
+    const cb2 = jest.fn();
+    await syncHandler({}, cb2);
+    expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 
-    const discReq = socket.on.mock.calls.find(c => c[0] === 'disconnect');
-    if (discReq) discReq[1]();
+    // Case 3: with file not found
+    WorkspaceFile.findOne.mockResolvedValueOnce(null);
+    const cb3 = jest.fn();
+    await syncHandler({ fileId: 'f_missing' }, cb3);
+    expect(cb3).toHaveBeenCalledWith(expect.objectContaining({ error: 'Workspace file not found.' }));
+
+    // Case 4: with file found
+    WorkspaceFile.findOne.mockResolvedValue({ _id: 'f1', room: 'r1', snapshotCode: 'code', language: 'javascript' });
+    const cb4 = jest.fn();
+    await syncHandler({ fileId: 'f1' }, cb4);
+    expect(cb4).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
-  
-  it('replaceDocumentState', () => {
-    crdtSocketHandler.replaceDocumentState('R1', 'content', 'F1');
+
+  it('handles crdt-operation with full coverage', async () => {
+    const io = { on: jest.fn() };
+    crdtSocketHandler.initializeCrdtSocket(io);
+    const connectCb = io.on.mock.calls.find((c) => c[0] === 'connection')[1];
+
+    const socket = {
+      on: jest.fn(),
+      currentRoom: 'ROOM1',
+      user: { _id: 'u1' },
+      emit: jest.fn(),
+      to: jest.fn().mockReturnThis(),
+    };
+    connectCb(socket);
+
+    const opHandler = socket.on.mock.calls.find((c) => c[0] === 'crdt-operation')[1];
+
+    const mockRoom = {
+      _id: 'r1',
+      roomCode: 'ROOM1',
+      owner: 'u1',
+      members: ['u1'],
+      snapshotCode: 'hello',
+    };
+    roomAccess.findRoomByCode.mockResolvedValue(mockRoom);
+
+    // Case 1: unpermitted
+    roomPermissions.canEdit.mockReturnValueOnce(false);
+    const cb1 = jest.fn();
+    await opHandler({ type: 'replace' }, cb1);
+    expect(cb1).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
+
+    // Case 2: invalid op type
+    const cb2 = jest.fn();
+    await opHandler({ type: 'invalid' }, cb2);
+    expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
+
+    // Case 3: valid replace op local
+    const cb3 = jest.fn();
+    await opHandler({ type: 'replace', inserts: [], deletes: [] }, cb3);
+    expect(cb3).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+
+    // Case 4: valid replace op redis atomic
+    redisService.isRedisReady.mockReturnValue(true);
+    redisDocState.applyOperationAtomic.mockResolvedValueOnce({
+      state: 'nodes',
+      changed: true,
+      text: 'updated',
+    });
+    const cb4 = jest.fn();
+    await opHandler({ type: 'replace', inserts: [], deletes: [], fileId: 'f1' }, cb4);
+    expect(cb4).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+
+    // Case 5: fileId with missing file
+    WorkspaceFile.findOne.mockResolvedValueOnce(null);
+    const cb5 = jest.fn();
+    await opHandler({ type: 'replace', fileId: 'missing' }, cb5);
+    expect(cb5).toHaveBeenCalledWith(expect.objectContaining({ error: 'Workspace file not found.' }));
+
+    // Disconnect event
+    const discHandler = socket.on.mock.calls.find((c) => c[0] === 'disconnect')[1];
+    discHandler();
   });
 });

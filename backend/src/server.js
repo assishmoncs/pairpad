@@ -155,8 +155,24 @@ process.on('unhandledRejection', (reason) => {
 });
 
 app.close = (cb) => {
-  io.close();
-  server.close(cb);
+  try {
+    io.close();
+  } catch { /* ignore */ }
+  if (typeof cb === 'function') {
+    try {
+      server.close(() => cb());
+    } catch {
+      cb();
+    }
+  } else {
+    return new Promise((resolve) => {
+      try {
+        server.close(() => resolve());
+      } catch {
+        resolve();
+      }
+    });
+  }
 };
 
 startServer();

@@ -31,6 +31,15 @@ describe('workspaceFileService', () => {
     expect(WorkspaceFile.find).toHaveBeenCalled();
   });
 
+  it('ensureDefaultFile handles language extensions', async () => {
+    const languages = ['python', 'cpp', 'c', 'java', 'go', 'rust', 'typescript', 'php', 'ruby', 'other'];
+    for (const lang of languages) {
+      WorkspaceFile.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+      WorkspaceFile.create.mockResolvedValue({ _id: '1', toObject: () => ({ _id: '1' }) });
+      await workspaceFileService.ensureDefaultFile({ _id: 'room1', language: lang }, 'user1');
+    }
+  });
+
   it('findFile', async () => {
     const mockLean = jest.fn().mockResolvedValue({ _id: '1' });
     WorkspaceFile.findOne.mockReturnValue({ lean: mockLean });

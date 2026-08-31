@@ -65,3 +65,55 @@ test('expired running interview rejects submission and ends interview', async ()
   expect(expired.interview.status).toBe('ended');
   expect(expired.interview.remainingSeconds).toBe(0);
 });
+
+test('interview lifecycle operations: createOrUpdate, start, pause, resume, end', async () => {
+  const {
+    createOrUpdateInterview,
+    startInterview,
+    pauseInterview,
+    resumeInterview,
+    endInterview,
+    sanitizeHostInterview,
+  } = require('../src/services/interviewService');
+
+  const r = room({ interview: null });
+
+  // createOrUpdateInterview
+  const config = {
+    title: 'New Interview',
+    description: 'Solve it',
+    durationMinutes: 45,
+    language: 'javascript',
+    candidateId: editor,
+    publicTests: [{ name: 'test1', stdin: '1', expectedOutput: '2' }],
+    hiddenTests: [{ name: 'test2', stdin: '3', expectedOutput: '4' }],
+  };
+  await createOrUpdateInterview(r, owner, config);
+  expect(r.interview.status).toBe('draft');
+
+  // sanitizeHostInterview
+  const hostView = sanitizeHostInterview(r.interview);
+  expect(hostView.hiddenTests).toHaveLength(1);
+
+  // startInterview
+  await startInterview(r, owner);
+  expect(r.interview.status).toBe('running');
+
+  // pauseInterview
+  await pauseInterview(r, owner);
+  expect(r.interview.status).toBe('paused');
+
+  // resumeInterview
+  await resumeInterview(r, owner);
+  expect(r.interview.status).toBe('running');
+
+  // endInterview
+  await endInterview(r, owner);
+  expect(r.interview.status).toBe('ended');
+
+  // Invalid state transitions throw errors
+  await expect(startInterview(r, owner)).rejects.toMatchObject({ code: 'INVALID_STATE' });
+  await expect(pauseInterview(r, owner)).rejects.toMatchObject({ code: 'INVALID_STATE' });
+  await expect(resumeInterview(r, owner)).rejects.toMatchObject({ code: 'INVALID_STATE' });
+  await expect(endInterview(r, owner)).rejects.toMatchObject({ code: 'INVALID_STATE' });
+});

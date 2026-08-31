@@ -23,5 +23,19 @@ describe('session tokens', () => {
     expect(decoded.type).toBe('refresh');
     expect(decoded.jti).toEqual(expect.any(String));
     expect(decoded.familyId).toBe('family-123');
+
+    // default familyId
+    const token2 = generateRefreshToken('user-123');
+    expect(token2).toBeDefined();
+  });
+
+  test('verifyRefreshToken verifies and rejects non-refresh token', () => {
+    const { verifyRefreshToken } = require('../src/utils/sessionTokens');
+    const refreshToken = generateRefreshToken('user-123');
+    const decoded = verifyRefreshToken(refreshToken);
+    expect(decoded.userId).toBe('user-123');
+
+    const accessToken = generateAccessToken('user-123');
+    expect(() => verifyRefreshToken(accessToken)).toThrow('Invalid token type.');
   });
 });

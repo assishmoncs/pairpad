@@ -74,4 +74,75 @@ describe('refresh session rotation', () => {
     expect(hash).toHaveLength(64);
     expect(hash).not.toBe('abc');
   });
+
+  test('issueSession creates a new refresh session', async () => {
+    const req = { get: jest.fn().mockReturnValue('UserAgent/1.0'), ip: '127.0.0.1' };
+    const { issueSession } = require('../src/services/refreshSessionService');
+    const result = await issueSession({ userId: 'u1', req });
+    expect(result.refreshToken).toBeDefined();
+    expect(RefreshSession.create).toHaveBeenCalled();
+
+    // without req or familyId
+    await issueSession({ userId: 'u2' });
+  });
+
+  test('rotate handles missing session, expired session, and mismatched user', async () => {
+    const token = makeToken({ userId: 'u1' });
+
+    // Missing session
+    RefreshSession.findOne.mockResolvedValueOnce(null);
+    await expect(rotate({ refreshToken: token })).rejects.toMatchObject({ code: 'REFRESH_REUSE' });
+
+    // Expired session
+    RefreshSession.findOne.mockResolvedValueOnce({
+      _id: 's1',
+      user: { toString: () => 'u1' },
+      familyId: 'family-1',
+      revokedAt: null,
+      expiresAt: new Date(Date.now() - 10000),
+    });
+    await expect(rotate({ refreshToken: token })).rejects.toMatchObject({ code: 'REFRESH_REUSE' });
+
+    // Mismatched user
+    RefreshSession.findOne.mockResolvedValueOnce({
+      _id: 's2',
+      user: { toString: () => 'different-user' },
+      familyId: 'family-1',
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 86400000),
+    });
+    await expect(rotate({ refreshToken: token })).rejects.toMatchObject({ code: 'REFRESH_REUSE' });
+
+    // Modified count !== 1
+    RefreshSession.findOne.mockResolvedValueOnce({
+      _id: 's3',
+      user: { toString: () => 'u1' },
+      familyId: 'family-1',
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 86400000),
+    });
+    RefreshSession.updateOne.mockResolvedValueOnce({ modifiedCount: 0 });
+    await expect(rotate({ refreshToken: token })).rejects.toMatchObject({ code: 'REFRESH_REUSE' });
+  });
+
+  test('revokeToken and revokeAllForUser', async () => {
+    const { revokeToken, revokeAllForUser, getRefreshCookieName } = require('../src/services/refreshSessionService');
+    expect(getRefreshCookieName()).toBeDefined();
+
+    // revokeToken with valid token
+    const token = makeToken();
+    await revokeToken(token);
+    expect(RefreshSession.updateOne).toHaveBeenCalled();
+
+    // revokeToken with null / empty token
+    await revokeToken(null);
+
+    // revokeToken with token missing jti
+    const badToken = jwt.sign({ foo: 'bar' }, 'test-secret');
+    await revokeToken(badToken);
+
+    // revokeAllForUser
+    await revokeAllForUser('u1');
+    expect(RefreshSession.updateMany).toHaveBeenCalledWith({ user: 'u1', revokedAt: null }, expect.any(Object));
+  });
 });

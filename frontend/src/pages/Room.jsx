@@ -182,7 +182,7 @@ const Room = () => {
 
       setIsSaving(true);
       try {
-        await socketService.sendCodeChange(value, language);
+        await socketService.sendCodeChange(value, language, roomCode);
         setSyncError('');
       } catch (err) {
         console.error('[Room] Failed to send code change:', err);

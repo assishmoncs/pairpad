@@ -25,6 +25,7 @@ class SocketService {
     this.socket = null;
     this.connected = false;
     this.currentRoom = null;
+    this.joinRoomPromise = null;
     this.listeners = new Map();
   }
 
@@ -173,6 +174,7 @@ class SocketService {
       this.socket = null;
       this.connected = false;
       this.currentRoom = null;
+      this.joinRoomPromise = null;
       this.clearListeners();
     }
   }
@@ -247,9 +249,19 @@ class SocketService {
    * Send code change to other room members.
    * @param {string} content - Editor content
    * @param {string} language - Programming language
+   * @param {string} [roomCode] - Room code to auto-join before sending
    * @returns {Promise<object>}
    */
-  sendCodeChange(content, language) {
+  async sendCodeChange(content, language, roomCode = this.currentRoom) {
+    if (!this.currentRoom && roomCode) {
+      if (!this.joinRoomPromise) {
+        this.joinRoomPromise = this.joinRoom(roomCode).finally(() => {
+          this.joinRoomPromise = null;
+        });
+      }
+      await this.joinRoomPromise;
+    }
+
     return this.emitWithAck(
       'code-change',
       { content, language },

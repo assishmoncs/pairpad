@@ -24,7 +24,7 @@
     "helmet": "^8.3.0",
     "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.5.2",
+    "mongoose": "^9.9.4",
     "socket.io": "^4.8.0"
   },
   "devDependencies": {

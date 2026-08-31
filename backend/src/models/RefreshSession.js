@@ -12,7 +12,6 @@ const refreshSessionSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     familyId: {
       type: String,
@@ -22,7 +21,6 @@ const refreshSessionSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: true,
-      index: true,
     },
     revokedAt: {
       type: Date,

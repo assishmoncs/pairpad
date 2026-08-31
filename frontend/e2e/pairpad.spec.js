@@ -117,7 +117,7 @@ test.describe('PairPad collaboration smoke flow', () => {
     await expect(newFileInput).toBeVisible({ timeout: 30000 });
     await newFileInput.fill('src/main.js');
 
-    const addFileBtn = owner.getByRole('button', { name: '+' });
+    const addFileBtn = owner.getByRole('button', { name: 'Create file' });
     await expect(addFileBtn).toBeVisible();
     await addFileBtn.click();
 

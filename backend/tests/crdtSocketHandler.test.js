@@ -24,6 +24,7 @@ describe('crdtSocketHandler', () => {
     redisDocState.getState.mockResolvedValue(null);
     redisDocState.setState.mockResolvedValue(true);
     redisDocState.applyOperationAtomic.mockResolvedValue(null);
+    WorkspaceFile.findOne.mockResolvedValue({ _id: 'f1', room: 'r1' });
   });
 
   it('exports functions', () => {
@@ -163,6 +164,7 @@ describe('crdtSocketHandler', () => {
       members: ['u1'],
       snapshotCode: '',
     });
+    WorkspaceFile.findOne.mockResolvedValue({ _id: 'f1', room: 'r2' });
     redisService.isRedisReady.mockReturnValue(true);
 
     const order = [];

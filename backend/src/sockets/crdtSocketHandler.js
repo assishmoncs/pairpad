@@ -81,7 +81,8 @@ const persistDocument = async (roomCode, fileId, authorId) => {
   const content = visibleText(document.nodes);
   if (isRedisReady()) await setRedisState(key, serialized);
   if (fileId) {
-    await WorkspaceFile.updateOne({ _id: fileId, room: (await findRoomByCode(roomCode))._id }, { $set: { crdtState: serialized, snapshotCode: content } });
+    const room = await findRoomByCode(roomCode);
+    if (room) await WorkspaceFile.updateOne({ _id: fileId, room: room._id }, { $set: { crdtState: serialized, snapshotCode: content } });
   } else {
     await Room.updateOne({ roomCode }, { $set: { crdtState: serialized, snapshotCode: content } });
   }
@@ -120,6 +121,8 @@ const withinOperationRate = (socket) => {
 
 const initializeCrdtSocket = (io) => {
   io.on('connection', (socket) => {
+    let socketOperationQueue = Promise.resolve();
+
     socket.on('crdt-sync-request', async (data = {}, callback) => {
       try {
         const room = await getAuthorizedRoom(socket, false);
@@ -139,41 +142,45 @@ const initializeCrdtSocket = (io) => {
       }
     });
 
-    socket.on('crdt-operation', async (operation = {}, callback) => {
-      try {
-        const room = await getAuthorizedRoom(socket, true);
-        if (!room) return callback?.({ error: 'Editor permission required.' });
-        if (!withinOperationRate(socket)) return callback?.({ error: 'CRDT operation rate limit exceeded.' });
-        if (!operation || operation.type !== 'replace') return callback?.({ error: 'Unsupported CRDT operation.' });
-        const file = await resolveFile(room, operation.fileId);
-        if (operation.fileId && !file) return callback?.({ error: 'Workspace file not found.' });
-        const transportOperation = { ...operation }; delete transportOperation.fileId;
-        if (Buffer.byteLength(JSON.stringify(operation), 'utf8') > MAX_OPERATION_BYTES) return callback?.({ error: 'CRDT operation is too large.' });
-        const key = keyFor(socket.currentRoom, operation.fileId);
+    socket.on('crdt-operation', (operation = {}, callback) => {
+      const processOperation = async () => {
+        try {
+          const room = await getAuthorizedRoom(socket, true);
+          if (!room) return callback?.({ error: 'Editor permission required.' });
+          if (!withinOperationRate(socket)) return callback?.({ error: 'CRDT operation rate limit exceeded.' });
+          if (!operation || operation.type !== 'replace') return callback?.({ error: 'Unsupported CRDT operation.' });
+          const file = await resolveFile(room, operation.fileId);
+          if (operation.fileId && !file) return callback?.({ error: 'Workspace file not found.' });
+          const transportOperation = { ...operation }; delete transportOperation.fileId;
+          if (Buffer.byteLength(JSON.stringify(operation), 'utf8') > MAX_OPERATION_BYTES) return callback?.({ error: 'CRDT operation is too large.' });
+          const key = keyFor(socket.currentRoom, operation.fileId);
 
-        await enqueueDocumentOperation(key, async () => {
-          if (isRedisReady()) {
-            const atomic = await applyOperationAtomic(key, transportOperation);
-            if (atomic) {
-              documents.set(key, buildDocument(atomic.state));
+          await enqueueDocumentOperation(key, async () => {
+            if (isRedisReady()) {
+              const atomic = await applyOperationAtomic(key, transportOperation);
+              if (atomic) {
+                documents.set(key, buildDocument(atomic.state));
+                schedulePersist(socket.currentRoom, operation.fileId, socket.user._id);
+                socket.to(`room:${socket.currentRoom}`).emit('crdt-operation', operation);
+                return callback?.({ success: true, changed: atomic.changed, textLength: atomic.text.length, fileId: operation.fileId || null });
+              }
+            }
+            const document = await getDocument(socket.currentRoom, operation.fileId);
+            if (!document) return callback?.({ error: 'Room not found.' });
+            const changed = applyReplaceOperation(document.nodes, transportOperation);
+            if (changed) {
               schedulePersist(socket.currentRoom, operation.fileId, socket.user._id);
               socket.to(`room:${socket.currentRoom}`).emit('crdt-operation', operation);
-              return callback?.({ success: true, changed: atomic.changed, textLength: atomic.text.length, fileId: operation.fileId || null });
             }
-          }
-          const document = await getDocument(socket.currentRoom, operation.fileId);
-          if (!document) return callback?.({ error: 'Room not found.' });
-          const changed = applyReplaceOperation(document.nodes, transportOperation);
-          if (changed) {
-            schedulePersist(socket.currentRoom, operation.fileId, socket.user._id);
-            socket.to(`room:${socket.currentRoom}`).emit('crdt-operation', operation);
-          }
-          callback?.({ success: true, changed, textLength: visibleText(document.nodes).length, fileId: operation.fileId || null });
-        });
-      } catch (error) {
-        logger.error('CRDT operation failed', { message: error.message });
-        callback?.({ error: 'Failed to apply collaborative edit.' });
-      }
+            callback?.({ success: true, changed, textLength: visibleText(document.nodes).length, fileId: operation.fileId || null });
+          });
+        } catch (error) {
+          logger.error('CRDT operation failed', { message: error.message });
+          callback?.({ error: 'Failed to apply collaborative edit.' });
+        }
+      };
+
+      socketOperationQueue = socketOperationQueue.then(processOperation, processOperation);
     });
 
     socket.on('disconnect', () => {

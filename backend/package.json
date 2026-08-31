@@ -30,7 +30,7 @@
   "devDependencies": {
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
-    "globals": "^17.9.0",
+    "globals": "^17.11.0",
     "jest": "^30.5.0",
     "nodemon": "^3.1.4",
     "supertest": "^7.0.0"

@@ -181,6 +181,7 @@ const initializeCrdtSocket = (io) => {
       };
 
       socketOperationQueue = socketOperationQueue.then(processOperation, processOperation);
+      return socketOperationQueue;
     });
 
     socket.on('disconnect', () => {

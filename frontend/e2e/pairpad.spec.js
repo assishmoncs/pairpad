@@ -69,15 +69,20 @@ test.describe('PairPad collaboration smoke flow', () => {
 
     const openRoomBtn = roomCard.getByRole('button', { name: 'Open Room' });
     await expect(openRoomBtn).toBeVisible();
-    await openRoomBtn.click();
-    await expect(owner).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
 
-    // Wait for room to initialize and render workspace components before asserting socket state
-    await expect(owner.getByRole('heading', { name: 'Files' })).toBeVisible({ timeout: 30000 });
+    const ownerRoomResponse = owner.waitForResponse(
+      (resp) => resp.url().includes(`/api/rooms/${roomCode}`) && resp.status() === 200
+    );
+    await openRoomBtn.click();
+    await ownerRoomResponse;
+    await expect(owner).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
 
     // Explicitly wait for the WebSocket / Socket.IO connection handshake to be fully established and stable
     await expect(owner.locator('.status-dot.connected')).toBeVisible({ timeout: 30000 });
     await expect(owner.getByText('Connected')).toBeVisible({ timeout: 30000 });
+
+    // Verify room heading using robust text selector
+    await expect(owner.getByText('E2E Collaboration Room', { exact: true })).toBeVisible({ timeout: 30000 });
 
     // Now navigate the secondary user (collaborator) into the room
     const joinRoomBtn = collaborator.getByRole('button', { name: 'Join Room' });
@@ -90,15 +95,20 @@ test.describe('PairPad collaboration smoke flow', () => {
 
     const submitJoinBtn = collaborator.getByRole('button', { name: /Join Room$/ }).last();
     await expect(submitJoinBtn).toBeVisible();
-    await submitJoinBtn.click();
-    await expect(collaborator).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
 
-    // Wait for collaborator's room to initialize and render workspace components
-    await expect(collaborator.getByRole('heading', { name: 'Files' })).toBeVisible({ timeout: 30000 });
+    const collabRoomResponse = collaborator.waitForResponse(
+      (resp) => resp.url().includes(`/api/rooms/${roomCode}`) && resp.status() === 200
+    );
+    await submitJoinBtn.click();
+    await collabRoomResponse;
+    await expect(collaborator).toHaveURL(new RegExp(`/room/${roomCode}`), { timeout: 30000 });
 
     // Ensure the collaborator's WebSocket connection handshake is also fully established
     await expect(collaborator.locator('.status-dot.connected')).toBeVisible({ timeout: 30000 });
     await expect(collaborator.getByText('Connected')).toBeVisible({ timeout: 30000 });
+
+    // Verify collaborator room heading using robust text selector
+    await expect(collaborator.getByText('E2E Collaboration Room', { exact: true })).toBeVisible({ timeout: 30000 });
 
     const newFileInput = owner.getByLabel('New file path', { exact: true });
     await expect(newFileInput).toBeVisible({ timeout: 30000 });

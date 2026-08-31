@@ -282,7 +282,7 @@ export default function RoomCollaborative() {
           >
             ← Dashboard
           </button>
-          <h1>{room?.name}</h1>
+          <h1 className="room-title">{room?.name}</h1>
           {activeFile && (
             <span className="active-file-badge" title="Active workspace file">
               {activeFile.path}

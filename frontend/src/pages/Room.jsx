@@ -255,7 +255,7 @@ const Room = () => {
           >
             ← Dashboard
           </button>
-          <h1>{room?.name}</h1>
+          <h1 className="room-title">{room?.name}</h1>
           {room?.roomCode && (
             <button
               type="button"

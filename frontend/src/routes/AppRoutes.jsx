@@ -1,10 +1,10 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 import Dashboard from '../pages/Dashboard';
-import Room from '../pages/Room';
+import Room from '../pages/RoomCollaborative';
 import NotFound from '../pages/NotFound';
 
 const FullPageState = ({ title, children }) => (
@@ -18,7 +18,6 @@ const FullPageState = ({ title, children }) => (
 
 const SessionUnavailable = () => {
   const { authError, refreshUser, logout } = useAuth();
-
   return (
     <FullPageState title="Session temporarily unavailable">
       <p>{authError || 'We could not load your account right now.'}</p>
@@ -36,36 +35,43 @@ const SessionUnavailable = () => {
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isUserLoaded, authStatus, loading } = useAuth();
-
-  if (loading) {
+  if (loading)
     return (
       <FullPageState title="Loading">
         <p>Checking your session...</p>
       </FullPageState>
     );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (authStatus === 'unavailable') {
-    return <SessionUnavailable />;
-  }
-
-  if (!isUserLoaded) {
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (authStatus === 'unavailable') return <SessionUnavailable />;
+  if (!isUserLoaded)
     return (
       <FullPageState title="Loading">
         <p>Loading your account...</p>
       </FullPageState>
     );
-  }
-
   return children;
 };
 
-const AppRoutes = () => {
+const AccessibleRouteContent = ({ children }) => {
+  const location = useLocation();
+  React.useEffect(() => {
+    document.getElementById('main-content')?.focus();
+  }, [location.pathname]);
+
   return (
+    <>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      <div id="main-content" tabIndex="-1" className="route-content">
+        {children}
+      </div>
+    </>
+  );
+};
+
+const AppRoutes = () => (
+  <AccessibleRouteContent>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -88,7 +94,7 @@ const AppRoutes = () => {
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
-  );
-};
+  </AccessibleRouteContent>
+);
 
 export default AppRoutes;

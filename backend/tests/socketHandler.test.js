@@ -112,7 +112,7 @@ describe('connection authentication', () => {
   it('rejects an invalid token', async () => {
     const { next } = await runMiddleware({ auth: { token: 'garbage' }, query: {} });
 
-    expect(next.mock.calls[0][0].message).toBe('Invalid or expired token.');
+    expect(next.mock.calls[0][0].message).toBe('Authentication service error.');
   });
 
   it('rejects a valid token whose user no longer exists', async () => {
@@ -142,7 +142,7 @@ describe('join-room', () => {
 
     await socket.handlers['join-room']({}, callback);
 
-    expect(callback).toHaveBeenCalledWith({ error: 'Room code is required.' });
+    expect(callback).toHaveBeenCalledWith({ error: 'A valid room code is required.' });
   });
 
   it('reports an unknown room', async () => {
@@ -193,6 +193,7 @@ describe('join-room', () => {
       success: true,
       room: { roomCode: ROOM_CODE, name: 'Test Room', language: 'javascript' },
       users: [{ userId: USER_ID, name: 'Ada', socketId: 'socket-1' }],
+      role: 'owner',
     });
   });
 
@@ -241,11 +242,11 @@ describe('join-room', () => {
 });
 
 describe('code-change', () => {
-  it('rejects a broadcast from a socket that has not joined a room', () => {
+  it('rejects a broadcast from a socket that has not joined a room', async () => {
     const socket = connect(io, createSocket());
     const callback = jest.fn();
 
-    socket.handlers['code-change']({ content: 'x' }, callback);
+    await socket.handlers['code-change']({ content: 'x' }, callback);
 
     expect(callback).toHaveBeenCalledWith({ error: 'Not in a room.' });
   });
@@ -255,7 +256,7 @@ describe('code-change', () => {
     await joinRoom(socket);
     const callback = jest.fn();
 
-    socket.handlers['code-change']({}, callback);
+    await socket.handlers['code-change']({}, callback);
 
     expect(callback).toHaveBeenCalledWith({ error: 'Content is required.' });
   });
@@ -265,7 +266,7 @@ describe('code-change', () => {
     await joinRoom(socket);
     const callback = jest.fn();
 
-    socket.handlers['code-change']({ content: 'let x = 1;', language: 'javascript' }, callback);
+    await socket.handlers['code-change']({ content: 'let x = 1;', language: 'javascript' }, callback);
 
     expect(socket.emittedToOthers).toContainEqual({
       channel: `room:${ROOM_CODE}`,
@@ -295,7 +296,7 @@ describe('cursor-update', () => {
     await joinRoom(socket);
     const position = { line: 3, column: 7 };
 
-    socket.handlers['cursor-update']({ position, selection: null });
+    await socket.handlers['cursor-update']({ position, selection: null });
 
     expect(socket.emittedToOthers).toContainEqual({
       channel: `room:${ROOM_CODE}`,
@@ -335,7 +336,7 @@ describe('chat-message', () => {
 
     await socket.handlers['chat-message']({ content: 'hi' }, callback);
 
-    expect(callback).toHaveBeenCalledWith({ error: 'Room not found.' });
+    expect(callback).toHaveBeenCalledWith({ error: 'Room membership required.' });
     expect(Message.create).not.toHaveBeenCalled();
   });
 

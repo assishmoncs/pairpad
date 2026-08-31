@@ -23,6 +23,15 @@ const hit = (app, times) => {
   return chain.then(() => responses);
 };
 
+beforeAll(() => {
+  process.env.TEST_RATE_LIMITER = 'true';
+});
+
+afterAll(() => {
+  delete process.env.TEST_RATE_LIMITER;
+});
+
+
 describe('rate limiters', () => {
   it('blocks execution requests after 5 per minute', async () => {
     const responses = await hit(appWith(executeLimiter), 6);

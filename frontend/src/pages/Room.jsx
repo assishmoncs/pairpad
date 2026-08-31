@@ -13,11 +13,11 @@ import Logo from '../components/Logo';
 import ChatPanel from '../components/ChatPanel';
 import ExecutionPanel from '../components/ExecutionPanel';
 import { useCollaboration } from '../hooks/useCollaboration';
+import { useCrdtCollaboration } from '../hooks/useCrdtCollaboration';
 import { useChat } from '../hooks/useChat';
 import { useCodeExecution } from '../hooks/useCodeExecution';
 import './Room.css';
 
-// Re-export for consumers/tests that import it from the page module.
 export { appendUniqueMessage };
 
 const copyToClipboard = async (text) => {
@@ -36,23 +36,16 @@ const Room = () => {
   const navigate = useNavigate();
   const { user, token } = useAuth();
 
-  // ── Room data ──────────────────────────────────────────────────────────────
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingRoom, setDeletingRoom] = useState(false);
-
-  // ── UI feedback ───────────────────────────────────────────────────────────
   const [copiedCode, setCopiedCode] = useState(false);
-
-  // ── Editor ────────────────────────────────────────────────────────────────
   const [code, setCode] = useState('// Start coding together...\n');
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [isSaving, setIsSaving] = useState(false);
   const [syncError, setSyncError] = useState('');
   const editorRef = useRef(null);
-
-  // Track whether this component is still mounted to avoid state updates after unmount.
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -62,10 +55,8 @@ const Room = () => {
     };
   }, []);
 
-  // ── Chat ──────────────────────────────────────────────────────────────────
   const chat = useChat({ roomCode });
 
-  // ── Execution ─────────────────────────────────────────────────────────────
   const {
     executing,
     stdin,
@@ -79,7 +70,6 @@ const Room = () => {
     handleRunCode,
   } = useCodeExecution({ code, language, roomCode });
 
-  // ── Collaboration (socket lifecycle) ──────────────────────────────────────
   const onRemoteCode = useCallback(({ content, language: nextLanguage }) => {
     setCode(content);
     if (nextLanguage) setLanguage(nextLanguage);
@@ -114,7 +104,16 @@ const Room = () => {
   });
   const { connected } = collaboration;
 
-  // ── Room data ─────────────────────────────────────────────────────────────
+  const crdt = useCrdtCollaboration({
+    room,
+    roomCode,
+    enabled: true,
+    fallbackText: code,
+    onChange: useCallback((nextText) => {
+      setCode(nextText);
+    }, []),
+  });
+
   const fetchRoom = useCallback(async () => {
     try {
       const response = await axios.get(`/api/rooms/${roomCode}`);
@@ -135,22 +134,15 @@ const Room = () => {
       if (!isMember) {
         await axios.post(`/api/rooms/${roomCode}/join`);
         const updatedResponse = await axios.get(`/api/rooms/${roomCode}`);
-        if (isMountedRef.current) {
-          setRoom(updatedResponse.data.data.room);
-        }
+        if (isMountedRef.current) setRoom(updatedResponse.data.data.room);
       }
     } catch (err) {
-      if (isMountedRef.current) {
-        setError(getErrorMessage(err, 'Failed to load room.'));
-      }
+      if (isMountedRef.current) setError(getErrorMessage(err, 'Failed to load room.'));
     } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
+      if (isMountedRef.current) setLoading(false);
     }
   }, [roomCode, user]);
 
-  // Fetch room data whenever roomCode changes. Full disconnect on cleanup.
   useEffect(() => {
     fetchRoom();
 
@@ -161,40 +153,35 @@ const Room = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
 
-  // ── Editor handlers ───────────────────────────────────────────────────────
-
   const handleEditorMount = (editor) => {
     editorRef.current = editor;
   };
 
   const handleCodeChange = useCallback(
     async (value) => {
-      setCode(value);
-
-      if (
-        collaboration.isRemoteChangeRef.current ||
-        value === collaboration.lastRemoteCodeRef.current
-      ) {
-        collaboration.isRemoteChangeRef.current = false;
-        collaboration.lastRemoteCodeRef.current = null;
+      if (!crdt.crdtReady) {
+        // CRDT state must be authoritative before editing is permitted.
         return;
       }
 
+      setCode(value);
       setIsSaving(true);
       try {
-        await socketService.sendCodeChange(value, language, roomCode);
-        setSyncError('');
+        await crdt.handleLocalChange(value);
+        setSyncError(crdt.crdtError || '');
       } catch (err) {
-        console.error('[Room] Failed to send code change:', err);
-        setSyncError(err.message || 'Failed to sync your changes. Collaborators may not see them.');
+        setSyncError(err.message || 'Failed to synchronize your changes.');
       } finally {
         setIsSaving(false);
       }
     },
-    [language, collaboration]
+    [crdt]
   );
 
-  // ── Room deletion ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!crdt.crdtError) return;
+    setSyncError(crdt.crdtError);
+  }, [crdt.crdtError]);
 
   const isRoomOwner = getUserId(room?.owner) === getUserId(user);
 
@@ -204,7 +191,6 @@ const Room = () => {
     const confirmed = window.confirm(
       `Delete room "${room.name}"? This permanently removes the room and its chat history.`
     );
-
     if (!confirmed) return;
 
     setDeletingRoom(true);
@@ -216,13 +202,9 @@ const Room = () => {
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to delete room.'));
     } finally {
-      if (isMountedRef.current) {
-        setDeletingRoom(false);
-      }
+      if (isMountedRef.current) setDeletingRoom(false);
     }
   };
-
-  // ── Render guards ─────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -266,12 +248,16 @@ const Room = () => {
   return (
     <div className="room-page">
       <header className="room-header">
-        <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Logo size={28} showText={false} />
-          <button onClick={() => navigate('/dashboard')} className="btn-secondary">
+    <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <Logo size={28} showText={false} />
+      <button 
+        onClick={() => navigate('/dashboard')} 
+        className="btn-secondary" 
+        aria-label="Back to Dashboard"
+      >
             ← Dashboard
           </button>
-          <h1>{room?.name}</h1>
+          <h1 className="room-title">{room?.name}</h1>
           {room?.roomCode && (
             <button
               type="button"
@@ -300,25 +286,56 @@ const Room = () => {
           <div className="connection-status">
             <span className={`status-dot ${connectionClass}`}></span>
             <span>{connectionLabel}</span>
-            {collaboration.socketError && !connected && (
-              <span className="error-text"> — {collaboration.socketError}</span>
+            {(collaboration.socketError || crdt.crdtError) && !connected && (
+              <span className="error-text"> — {collaboration.socketError || crdt.crdtError}</span>
             )}
           </div>
         </div>
       </header>
 
-      {error && <div className="room-alert error-text" aria-live="polite">{error}</div>}
+      {error && (
+        <div className="room-alert error-text" aria-live="polite">
+          {error}
+        </div>
+      )}
 
       <div className="room-layout">
         <div className="editor-section">
           <div className="editor-toolbar">
             <div className="language-selector">
               <label htmlFor="language">Language:</label>
-              <LanguageSelect value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Select Editor Language" />
+              <LanguageSelect
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                aria-label="Select Editor Language"
+              />
             </div>
-            {isSaving && <span className="saving-indicator" aria-live="polite">Syncing...</span>}
-            {syncError && <span className="error-text" aria-live="polite">{syncError}</span>}
-            <button onClick={handleRunCode} disabled={executing} className="btn-run" aria-label="Run Code">
+            {!crdt.crdtReady && !crdt.crdtError && (
+              <span className="saving-indicator" aria-live="polite">
+                Initializing collaborative editor…
+              </span>
+            )}
+            {crdt.crdtReady && (
+              <span className="saving-indicator" aria-live="polite">
+                CRDT Sync
+              </span>
+            )}
+            {isSaving && (
+              <span className="saving-indicator" aria-live="polite">
+                Syncing...
+              </span>
+            )}
+            {syncError && (
+              <span className="error-text" aria-live="polite">
+                {syncError}
+              </span>
+            )}
+            <button
+              onClick={handleRunCode}
+              disabled={executing}
+              className="btn-run"
+              aria-label="Run Code"
+            >
               {executing ? 'Running...' : 'Run Code'}
             </button>
           </div>
@@ -336,12 +353,17 @@ const Room = () => {
               fontSize: 14,
               automaticLayout: true,
               scrollBeyondLastLine: false,
+              readOnly: !crdt.crdtReady,
             }}
           />
         </div>
 
         <aside className="room-sidebar" aria-label="Room Sidebar">
-          <div className="sidebar-section presence-section" aria-live="polite" aria-label="Online Users">
+          <div
+            className="sidebar-section presence-section"
+            aria-live="polite"
+            aria-label="Online Users"
+          >
             <h3>Online Users ({collaboration.onlineUsers.length})</h3>
             <ul className="users-list">
               {collaboration.onlineUsers.map((u) => (

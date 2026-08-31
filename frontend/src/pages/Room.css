@@ -108,16 +108,16 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #dc3545; /* default: disconnected (red) */
+  background-color: #dc3545;
   flex-shrink: 0;
 }
 
 .status-dot.connected {
-  background-color: #28a745; /* green */
+  background-color: #28a745;
 }
 
 .status-dot.reconnecting {
-  background-color: #f59e0b; /* amber */
+  background-color: #f59e0b;
   animation: pulse-amber 1.2s ease-in-out infinite;
 }
 
@@ -487,34 +487,7 @@
   cursor: not-allowed;
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
-
-@media (max-width: 768px) {
-  .room-header,
-  .editor-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .room-layout {
-    flex-direction: column;
-  }
-
-  .room-sidebar {
-    width: 100%;
-    height: 40%;
-    border-left: none;
-    border-top: 1px solid #404040;
-  }
-
-  .editor-section {
-    height: 60%;
-  }
-
-  .presence-section {
-    max-height: 100px;
-  }
-}
+/* ── Header actions / room alerts ────────────────────────────────────────── */
 
 .header-actions {
   display: flex;
@@ -551,4 +524,111 @@
   background-color: #3a1f24;
   border-bottom: 1px solid #5f2c35;
   font-size: 0.85rem;
+}
+
+/* ── RBAC ─────────────────────────────────────────────────────────────────── */
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #4b5563;
+  padding: 0.15rem 0.5rem;
+  text-transform: capitalize;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.role-owner {
+  background: #422006;
+  border-color: #92400e;
+  color: #fbbf24;
+}
+.role-editor {
+  background: #052e16;
+  border-color: #166534;
+  color: #86efac;
+}
+.role-viewer {
+  background: #172554;
+  border-color: #1d4ed8;
+  color: #93c5fd;
+}
+
+.members-section {
+  flex: 0 0 auto;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.member-role-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  color: #cccccc;
+  font-size: 0.82rem;
+}
+
+.member-role-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.member-role-identity span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-role-row select {
+  background: #3c3c3c;
+  color: #ffffff;
+  border: 1px solid #404040;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+}
+
+.role-error {
+  padding: 0.5rem 0.75rem;
+  background: #3a1f24;
+  border-bottom: 1px solid #5f2c35;
+  color: #fca5a5;
+  font-size: 0.78rem;
+}
+
+.crdt-status {
+  color: #4ade80;
+}
+
+@media (max-width: 768px) {
+  .room-header,
+  .editor-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .room-layout {
+    flex-direction: column;
+  }
+
+  .room-sidebar {
+    width: 100%;
+    height: 40%;
+    border-left: none;
+    border-top: 1px solid #404040;
+  }
+
+  .editor-section {
+    height: 60%;
+  }
+
+  .presence-section {
+    max-height: 100px;
+  }
 }

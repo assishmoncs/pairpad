@@ -29,19 +29,28 @@ const renderAuth = () =>
 
 describe('AuthContext', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.clearAllMocks();
   });
 
-  it('is unauthenticated when there is no stored token', async () => {
+  it('is unauthenticated when refresh fails', async () => {
+    const error = new Error('Unauthorized');
+    error.response = { status: 401 };
+    axios.post.mockRejectedValue(error);
     renderAuth();
 
     expect(await screen.findByTestId('status')).toHaveTextContent('unauthenticated');
   });
 
   it('authenticates after a successful login', async () => {
-    axios.post.mockResolvedValue({
-      data: { data: { user: { name: 'Ada' }, token: 'tok-1' } },
+    axios.post.mockImplementation((url) => {
+      if (url === '/api/auth/refresh') {
+        const error = new Error('No token');
+        error.response = { status: 401 };
+        return Promise.reject(error);
+      }
+      if (url === '/api/auth/login')
+        return Promise.resolve({ data: { data: { user: { name: 'Ada' }, token: 'tok-1' } } });
+      return Promise.reject(new Error(`Unhandled POST ${url}`));
     });
 
     renderAuth();
@@ -55,13 +64,20 @@ describe('AuthContext', () => {
       expect(screen.getByTestId('status')).toHaveTextContent('authenticated');
     });
     expect(screen.getByTestId('name')).toHaveTextContent('Ada');
-    expect(localStorage.getItem('token')).toBe('tok-1');
+    expect(axios.defaults.headers.common.Authorization).toBe('Bearer tok-1');
   });
 
   it('logs the user out and clears the token', async () => {
-    localStorage.setItem('token', 'tok-x');
-    axios.get.mockResolvedValue({
-      data: { data: { user: { name: 'Ada' } } },
+    axios.post.mockImplementation((url) => {
+      if (url === '/api/auth/refresh')
+        return Promise.resolve({ data: { data: { token: 'tok-x' } } });
+      if (url === '/api/auth/logout') return Promise.resolve({});
+      return Promise.reject(new Error(`Unhandled POST ${url}`));
+    });
+    axios.get.mockImplementation((url) => {
+      if (url === '/api/auth/me')
+        return Promise.resolve({ data: { data: { user: { name: 'Ada' } } } });
+      return Promise.reject(new Error(`Unhandled GET ${url}`));
     });
 
     renderAuth();
@@ -70,6 +86,6 @@ describe('AuthContext', () => {
     fireEvent.click(screen.getByTestId('logout'));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('unauthenticated'));
-    expect(localStorage.getItem('token')).toBeNull();
+    expect(axios.defaults.headers.common.Authorization).toBeUndefined();
   });
 });

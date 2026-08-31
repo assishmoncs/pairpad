@@ -1,0 +1,177 @@
+name: PairPad Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, e.g. v1.2.3'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: pairpad-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })' || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      JWT_SECRET: release_ci_test_secret_replace_for_real_deployments
+      MONGODB_URI: mongodb://127.0.0.1:27017/pairpad_release_test
+      REDIS_URL: redis://127.0.0.1:6379
+      REDIS_REQUIRED: 'false'
+      CLIENT_URL: http://127.0.0.1:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend
+        working-directory: backend
+        run: npm install
+      - name: Backend lint
+        working-directory: backend
+        run: npm run lint
+      - name: Backend tests
+        working-directory: backend
+        run: npm test
+      - name: Install frontend
+        working-directory: frontend
+        run: npm install
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Frontend formatting
+        working-directory: frontend
+        run: npm run format:check
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Frontend build and budget
+        working-directory: frontend
+        run: npm run build:budget
+
+  images:
+    name: Build and publish images
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: backend_meta
+        with:
+          images: ghcr.io/${{ github.repository }}/backend
+          tags: |
+            type=raw,value=${{ steps.version.outputs.value }}
+            type=sha
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.backend_meta.outputs.tags }}
+          labels: ${{ steps.backend_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: docker/metadata-action@v5
+        id: frontend_meta
+        with:
+          images: ghcr.io/${{ github.repository }}/frontend
+          tags: |
+            type=raw,value=${{ steps.version.outputs.value }}
+            type=sha
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.frontend_meta.outputs.tags }}
+          labels: ${{ steps.frontend_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: docker/metadata-action@v5
+        id: worker_meta
+        with:
+          images: ghcr.io/${{ github.repository }}/execution-worker
+          tags: |
+            type=raw,value=${{ steps.version.outputs.value }}
+            type=sha
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./execution-worker
+          push: true
+          tags: ${{ steps.worker_meta.outputs.tags }}
+          labels: ${{ steps.worker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  smoke:
+    name: Release image smoke test
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config
+      - name: Record release provenance
+        run: |
+          mkdir -p release-artifacts
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "commit=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF}"
+            echo "version=${{ github.ref_name }}"
+            echo "release_images=backend,frontend,execution-worker"
+          } > release-artifacts/provenance.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-provenance
+          path: release-artifacts/provenance.txt

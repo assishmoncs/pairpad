@@ -1,22 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import socketService from '../services/socketService';
 
-/**
- * Owns the Socket.IO collaboration lifecycle for a room: connection,
- * auto-reconnect, room join/rejoin, presence, code sync, chat, and execution
- * broadcast forwarding.
- *
- * @param {object} options
- * @param {object|null} options.room         Loaded room (enables socket setup)
- * @param {string|null} options.token        JWT
- * @param {string} options.roomCode          URL room code
- * @param {React.MutableRefObject} options.isMountedRef
- * @param {Function} options.onRemoteCode    ({ content, language }) => void
- * @param {Function} options.onRoomDeleted   () => void
- * @param {Function} options.onChatIncoming  (message) => void
- * @param {Function} options.onExecutionResult ({ result }) => void
- * @param {Function} options.fetchMessages   () => Promise<void>
- */
 export const useCollaboration = ({
   room,
   token,
@@ -26,173 +10,156 @@ export const useCollaboration = ({
   onRoomDeleted,
   onChatIncoming,
   onExecutionResult,
+  onRoleUpdated,
   fetchMessages,
 }) => {
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]);
   const [socketError, setSocketError] = useState('');
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [remoteCursors, setRemoteCursors] = useState(new Map());
+  const socketCleanupRef = useRef(() => {});
+  const cursorExpiryTimersRef = useRef(new Map());
 
-  // Holds the unsubscribe function for all listeners registered for this room.
-  const socketCleanupRef = useRef(null);
-  // Set to true when an editor change is remote so the local handler skips a re-broadcast.
-  const isRemoteChangeRef = useRef(false);
-  const lastRemoteCodeRef = useRef(null);
-
-  const cleanupListeners = useCallback(() => {
-    if (socketCleanupRef.current) {
-      socketCleanupRef.current();
-      socketCleanupRef.current = null;
-    }
+  const clearRemoteCursors = useCallback(() => {
+    cursorExpiryTimersRef.current.forEach((timer) => clearTimeout(timer));
+    cursorExpiryTimersRef.current.clear();
+    setRemoteCursors(new Map());
   }, []);
 
-  /**
-   * Set up all socket listeners and connect (or re-use an existing connection).
-   * CRITICAL ORDER: listeners MUST be registered before connect() so the
-   * 'connect' event is never missed on fast / already-connected sockets.
-   */
+  const cleanupListeners = useCallback(() => {
+    socketCleanupRef.current();
+    socketCleanupRef.current = () => {};
+  }, []);
+
+  const callbacksRef = useRef({
+    onRemoteCode,
+    onRoomDeleted,
+    onChatIncoming,
+    onExecutionResult,
+    onRoleUpdated,
+    fetchMessages,
+  });
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onRemoteCode,
+      onRoomDeleted,
+      onChatIncoming,
+      onExecutionResult,
+      onRoleUpdated,
+      fetchMessages,
+    };
+  });
+
   const connectToSocket = useCallback(async () => {
     cleanupListeners();
+    if (!token || !roomCode) return;
+    setReconnecting(true);
     setSocketError('');
-    setReconnecting(false);
 
-    // 1. Register all listeners BEFORE connect()
-    const unsubConnect = socketService.on('connect', async () => {
-      if (!isMountedRef.current) return;
-      setConnected(true);
-      setReconnecting(false);
-      setSocketError('');
-
-      // Re-join after a reconnect so presence is restored.
-      const currentRoom = socketService.getCurrentRoom();
-      if (currentRoom) {
-        try {
-          const joinResponse = await socketService.joinRoom(currentRoom);
-          if (isMountedRef.current && joinResponse.users) {
-            setOnlineUsers(joinResponse.users);
-          }
-        } catch (err) {
-          console.error('[Room] Failed to rejoin room on reconnect:', err.message);
-          if (isMountedRef.current) {
-            setSocketError('Reconnected, but could not rejoin room: ' + err.message);
-          }
-        }
+    const unsubConnect = socketService.on('connect', () => {
+      if (isMountedRef.current) {
+        setConnected(true);
+        setReconnecting(false);
       }
     });
-
-    const unsubDisconnect = socketService.on('disconnect', ({ reason } = {}) => {
-      if (!isMountedRef.current) return;
-      setConnected(false);
-      const intentional = reason === 'io client disconnect' || reason === 'io server disconnect';
-      setReconnecting(!intentional);
-    });
-
-    const unsubError = socketService.on('connect_error', () => {
-      // Transient error; Socket.IO keeps retrying. No UI override needed here.
-    });
-
-    const unsubPresence = socketService.on('presence-update', ({ users }) => {
-      if (!isMountedRef.current) return;
-      setOnlineUsers(users || []);
-    });
-
-    const unsubCodeChange = socketService.on(
-      'code-change',
-      ({ content, language: nextLanguage }) => {
-        if (!isMountedRef.current) return;
-        isRemoteChangeRef.current = true;
-        lastRemoteCodeRef.current = content;
-        onRemoteCode({ content, language: nextLanguage });
-        setTimeout(() => {
-          isRemoteChangeRef.current = false;
-        }, 50);
+    const unsubDisconnect = socketService.on('disconnect', () => {
+      if (isMountedRef.current) {
+        setConnected(false);
+        setReconnecting(true);
+        clearRemoteCursors();
       }
+    });
+    const unsubPresence = socketService.on('presence-update', ({ users } = {}) => {
+      if (isMountedRef.current) setOnlineUsers(users || []);
+    });
+    const unsubUserLeft = socketService.on('user-left', ({ userId } = {}) => {
+      if (!userId) return;
+      setRemoteCursors((current) => {
+        const next = new Map(current);
+        next.delete(String(userId));
+        return next;
+      });
+    });
+    const unsubCursor = socketService.on('cursor-update', (cursor = {}) => {
+      if (!cursor.userId) return;
+      const userId = String(cursor.userId);
+      setRemoteCursors((current) => new Map(current).set(userId, cursor));
+      const previousTimer = cursorExpiryTimersRef.current.get(userId);
+      if (previousTimer) clearTimeout(previousTimer);
+      cursorExpiryTimersRef.current.set(
+        userId,
+        window.setTimeout(() => {
+          setRemoteCursors((current) => {
+            const next = new Map(current);
+            next.delete(userId);
+            return next;
+          });
+          cursorExpiryTimersRef.current.delete(userId);
+        }, 15000)
+      );
+    });
+    const unsubRole = socketService.on('member-role-updated', ({ role, userId } = {}) =>
+      callbacksRef.current.onRoleUpdated?.(role, userId)
+    );
+    const unsubCode = socketService.on('code-change', (data) =>
+      callbacksRef.current.onRemoteCode?.(data)
+    );
+    const unsubChat = socketService.on('chat-message', (data) =>
+      callbacksRef.current.onChatIncoming?.(data)
+    );
+    const unsubExecution = socketService.on('code-execution-result', (data) =>
+      callbacksRef.current.onExecutionResult?.(data)
+    );
+    const unsubDeleted = socketService.on('room-deleted', () =>
+      callbacksRef.current.onRoomDeleted?.()
     );
 
-    const unsubChatMessage = socketService.on('chat-message', onChatIncoming);
-
-    const unsubExecutionResult = socketService.on('code-execution-result', onExecutionResult);
-
-    const unsubRoomDeleted = socketService.on('room-deleted', () => {
-      if (!isMountedRef.current) return;
-      setSocketError('This room was deleted. Returning to dashboard…');
-      onRoomDeleted();
-    });
-
     socketCleanupRef.current = () => {
-      unsubConnect();
-      unsubDisconnect();
-      unsubError();
-      unsubPresence();
-      unsubCodeChange();
-      unsubChatMessage();
-      unsubExecutionResult();
-      unsubRoomDeleted();
+      [
+        unsubConnect,
+        unsubDisconnect,
+        unsubPresence,
+        unsubUserLeft,
+        unsubCursor,
+        unsubRole,
+        unsubCode,
+        unsubChat,
+        unsubExecution,
+        unsubDeleted,
+      ].forEach((fn) => fn());
+      clearRemoteCursors();
     };
 
-    // 2. Connect (or reuse) AFTER listeners are in place
     try {
       socketService.connect(token);
-
       await socketService.waitForConnection();
-
       if (!isMountedRef.current) return;
       setConnected(true);
-
-      // 3. Join the room channel
-      try {
-        const joinResponse = await socketService.joinRoom(roomCode);
-        if (isMountedRef.current && joinResponse.users) {
-          setOnlineUsers(joinResponse.users);
-        }
-      } catch (joinError) {
-        if (isMountedRef.current) {
-          setSocketError('Failed to join room: ' + joinError.message);
-        }
-      }
-
-      // 4. Load chat history
-      await fetchMessages();
-    } catch (err) {
-      console.error('[Room] Socket connection failed:', err.message);
+      const response = await socketService.joinRoom(roomCode);
+      if (isMountedRef.current && response.users) setOnlineUsers(response.users);
+      if (response.role) callbacksRef.current.onRoleUpdated?.(response.role);
+      await callbacksRef.current.fetchMessages();
+    } catch {
       if (isMountedRef.current) {
         setSocketError('Could not connect to collaboration server. Retrying…');
         setReconnecting(true);
       }
     }
-  }, [
-    cleanupListeners,
-    token,
-    roomCode,
-    isMountedRef,
-    onRemoteCode,
-    onChatIncoming,
-    onExecutionResult,
-    onRoomDeleted,
-    fetchMessages,
-  ]);
+  }, [cleanupListeners, clearRemoteCursors, token, roomCode, isMountedRef]);
 
-  // Connect once the room is loaded and we have a token. Clean up listeners
-  // (but keep the socket alive for reuse) on dependency change.
   useEffect(() => {
-    if (!room || !token) return;
-
-    connectToSocket();
-
-    return () => {
-      cleanupListeners();
-      socketService.leaveRoom();
-    };
+    if (room && token) void connectToSocket();
+    return cleanupListeners;
   }, [room, token, connectToSocket, cleanupListeners]);
 
   return {
     connected,
     reconnecting,
-    onlineUsers,
     socketError,
-    setSocketError,
-    isRemoteChangeRef,
-    lastRemoteCodeRef,
+    onlineUsers,
+    remoteCursors,
     connectToSocket,
     cleanupListeners,
   };

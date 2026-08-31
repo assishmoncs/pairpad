@@ -3,6 +3,7 @@
 
 const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
+const { requestStarted, recordRequest } = require('../utils/metrics');
 
 /**
  * Custom error class for known/operational API errors.
@@ -42,11 +43,13 @@ const getRequestId = (req) => {
 const requestLogger = (req, res, next) => {
   req.requestId = getRequestId(req);
   req.log = logger.child({ requestId: req.requestId });
+  requestStarted();
 
   const started = Date.now();
   res.on('finish', () => {
     const durationMs = Date.now() - started;
     const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+    recordRequest({ method: req.method, statusCode: res.statusCode, durationMs });
     (req.log || logger)[level]('request completed', {
       method: req.method,
       path: req.originalUrl,

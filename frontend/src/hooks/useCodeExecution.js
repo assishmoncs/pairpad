@@ -48,7 +48,9 @@ export const useCodeExecution = ({ code, language, roomCode }) => {
     showStdin,
     setShowStdin,
     executionResult,
+    setExecutionResult,
     executionError,
+    setExecutionError,
     handleRunCode,
   };
 };

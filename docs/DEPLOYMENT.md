@@ -1,14 +1,42 @@
 # PairPad Deployment Guide
 
-This guide covers production deployment of the backend and frontend.
+This guide covers reproducible local deployment and production deployment of the backend and frontend.
 
 ## 1. Prerequisites
 
+For manual deployment:
+
 - Node.js 20+ (18+ supported)
 - MongoDB (local, Atlas, or managed)
-- (Recommended) Judge0 CE — self-hosted or RapidAPI
+- Judge0 CE — self-hosted or RapidAPI for production code execution
 
-## 2. Environment Configuration
+For the containerized stack:
+
+- Docker Engine 24+
+- Docker Compose v2+
+
+## 2. Fastest reproducible start
+
+The repository now includes a Docker Compose stack for the application, MongoDB, health checks, and reverse-proxied frontend/API traffic.
+
+```bash
+export JWT_SECRET="$(node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")"
+docker compose up --build
+```
+
+Open `http://localhost` after the frontend health check passes.
+
+For Judge0-backed execution, additionally provide:
+
+```bash
+export JUDGE0_API_KEY="your-key"
+export JUDGE0_BASE_URL="https://judge0-ce.p.rapidapi.com"
+export JUDGE0_RAPIDAPI_HOST="judge0-ce.p.rapidapi.com"
+```
+
+The Compose stack explicitly sets `ALLOW_LOCAL_EXECUTION=false`.
+
+## 3. Manual environment configuration
 
 Create `backend/.env` from the template:
 
@@ -24,8 +52,8 @@ Set at minimum:
 | `MONGODB_URI` | Your MongoDB connection string |
 | `JWT_SECRET` | A long, high-entropy random string |
 | `CLIENT_URL` | The frontend origin, e.g. `https://pairpad.example.com` |
-| `JUDGE0_API_KEY` | A real Judge0 key (or self-hosted Judge0 URL + host) |
-| `ALLOW_LOCAL_EXECUTION` | Leave empty (local runner is disabled in production) |
+| `JUDGE0_API_KEY` | A real Judge0 key |
+| `ALLOW_LOCAL_EXECUTION` | Leave empty; disabled in production |
 | `LOG_LEVEL` | `info` |
 
 Generate a secret:
@@ -34,17 +62,18 @@ Generate a secret:
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-## 3. Build & Start
+## 4. Manual build & start
 
 ### Backend
 
 ```bash
 cd backend
 npm ci
-npm start            # runs `node src/server.js` (NODE_ENV=production)
+npm start
 ```
 
 Probes:
+
 - Liveness: `GET /health`
 - Readiness: `GET /ready` (returns 503 until MongoDB is connected)
 
@@ -53,58 +82,71 @@ Probes:
 ```bash
 cd frontend
 npm ci
-npm run build        # emits static assets to dist/
+npm run build
 ```
 
-Serve `dist/` from a CDN or static host (Nginx, S3 + CloudFront, Netlify,
-Vercel, etc.). Configure the host to proxy `/api` and `/socket.io` to the
-backend, or set `VITE_SOCKET_URL` and use absolute API URLs.
+Serve `dist/` from a CDN/static host or the included Nginx container. Requests to `/api/` and `/socket.io/` must reach the backend.
 
-## 4. Reverse Proxy (Nginx example)
+## 5. Included container architecture
+
+```text
+Browser
+  |
+  v
+Nginx / frontend
+  |
+  +---- /api/* ------> PairPad backend
+  |
+  +---- /socket.io/* -> PairPad backend
+                           |
+                           +---- MongoDB
+                           +---- Judge0 (external/self-hosted)
+```
+
+The frontend image serves the SPA and reverse proxies the API and Socket.IO paths to the backend service. The backend image runs as the unprivileged `node` user.
+
+## 6. Reverse proxy (standalone Nginx example)
 
 ```nginx
 server {
   listen 443 ssl http2;
   server_name pairpad.example.com;
 
-  # Frontend static assets
   root /var/www/pairpad/dist;
   index index.html;
 
   location / {
-    try_files $uri /index.html;
+    try_files $uri $uri/ /index.html;
   }
 
-  # API
   location /api/ {
     proxy_pass http://127.0.0.1:5000;
     proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Request-Id $request_id;
   }
 
-  # Socket.IO (long-lived WebSocket + long-polling)
   location /socket.io/ {
     proxy_pass http://127.0.0.1:5000;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 3600s;
   }
 }
 ```
 
-> If you run **multiple backend instances**, enable sticky sessions for the
-> Socket.IO HTTP long-polling transport (Socket.IO's WebSocket transport is
-> already sticky via the Upgrade header).
+## 7. Process management & health
 
-## 5. Process Management & Health
+Use a process supervisor or container orchestrator and wire liveness/readiness probes.
 
-Use a process supervisor (systemd, pm2, or a container orchestrator) and wire
-liveness/readiness probes:
-
-```bash
-# systemd example
+```ini
 [Service]
 WorkingDirectory=/opt/pairpad/backend
 ExecStart=/usr/bin/node src/server.js
@@ -112,30 +154,18 @@ Restart=always
 EnvironmentFile=/opt/pairpad/backend/.env
 ```
 
-## 6. Running with Docker (recommended)
-
-We recommend containerizing the backend and running it in an isolated,
-disposable environment — especially for code execution. Example:
-
-```dockerfile
-FROM node:20-slim
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
-COPY . .
-EXPOSE 5000
-CMD ["node", "src/server.js"]
-```
-
-Use `ALLOW_LOCAL_EXECUTION` gating (leave unset) and prefer a containerized
-Judge0 instance for all execution.
-
-## 7. Security checklist before go-live
+## 8. Production security checklist
 
 - [ ] `NODE_ENV=production` and a strong `JWT_SECRET`
-- [ ] `ALLOW_LOCAL_EXECUTION` unset (local runner disabled)
-- [ ] TLS termination and correct CORS origin in `CLIENT_URL`
-- [ ] Rate limiting confirmed (auth, execute, socket connection)
+- [ ] `ALLOW_LOCAL_EXECUTION` unset/false
+- [ ] TLS termination and exact CORS origin in `CLIENT_URL`
+- [ ] Rate limiting confirmed for auth, execute, and socket connections
 - [ ] Readiness probe wired into the orchestrator/load balancer
 - [ ] Structured logs shipped to an aggregation/error-tracking service
-- [ ] Backups and monitoring for MongoDB
+- [ ] MongoDB backups and monitoring configured
+- [ ] Judge0 or an isolated execution worker used for untrusted code
+- [ ] Application images run as non-root users
+
+## 9. Scaling note
+
+The current collaboration presence layer is single-instance. Once Redis-backed Socket.IO and shared collaboration state are implemented, run multiple backend replicas behind a load balancer and use Redis for cross-instance event propagation.

@@ -20,6 +20,7 @@ PAIRPAD_BASE_URL=http://127.0.0.1:5000 \
 PERF_REQUESTS=300 \
 PERF_CONCURRENCY=25 \
 PERF_P95_MS=300 \
+PERF_ERROR_RATE=0 \
 npm run perf
 ```
 
@@ -44,7 +45,7 @@ The `performance` GitHub Actions job runs after backend and frontend quality job
 
 When a budget fails:
 
-1. Inspect the uploaded backend log and performance JSON output.
+1. Inspect the uploaded backend log and performance output.
 2. Check whether the regression is CPU, database, network, or bundle related.
 3. Fix the underlying code or explicitly revise the measured budget with justification.
 4. Never weaken the gate just to make CI green.

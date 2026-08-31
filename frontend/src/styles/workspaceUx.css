@@ -1,0 +1,134 @@
+/* Phase 11: collaboration workspace UX and accessibility */
+
+.connection-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #404040;
+  font-size: 0.82rem;
+}
+
+.connection-banner > div {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.connection-banner span {
+  color: #c9c9c9;
+}
+
+.connection-banner-reconnecting {
+  background: #422006;
+  color: #fbbf24;
+}
+.connection-banner-disconnected {
+  background: #3a1f24;
+  color: #fca5a5;
+}
+
+.btn-retry-connection,
+.workspace-help-button {
+  border: 1px solid #525252;
+  border-radius: 4px;
+  background: #2d2d2d;
+  color: #f3f4f6;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.btn-retry-connection:hover,
+.workspace-help-button:hover,
+.btn-retry-connection:focus-visible,
+.workspace-help-button:focus-visible {
+  border-color: #007acc;
+  outline: none;
+}
+
+.workspace-shortcuts {
+  position: absolute;
+  top: 3.5rem;
+  right: 1rem;
+  z-index: 20;
+  width: min(320px, calc(100vw - 2rem));
+  padding: 0.8rem;
+  background: #252526;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.workspace-shortcuts h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.workspace-shortcuts dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.workspace-shortcuts kbd {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid #525252;
+  border-radius: 3px;
+  background: #1e1e1e;
+  color: #fff;
+}
+
+.room-page :is(button, select, input, textarea):focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.room-page button[disabled],
+.room-page select[disabled] {
+  opacity: 0.65;
+}
+
+@media (max-width: 900px) {
+  .room-header,
+  .header-left,
+  .header-actions,
+  .editor-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .room-sidebar {
+    width: 38vw;
+    min-width: 240px;
+  }
+}
+
+@media (max-width: 700px) {
+  .room-layout {
+    flex-direction: column;
+  }
+
+  .room-sidebar {
+    width: 100%;
+    max-height: 42vh;
+    border-left: 0;
+    border-top: 1px solid #404040;
+  }
+
+  .editor-section {
+    min-height: 58vh;
+  }
+
+  .room-header {
+    padding: 0.65rem 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot.reconnecting {
+    animation: none;
+  }
+}

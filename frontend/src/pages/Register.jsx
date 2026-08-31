@@ -50,7 +50,11 @@ const Register = () => {
         </div>
         <h1>Create Account</h1>
 
-        {error && <div className="error-message" aria-live="polite">{error}</div>}
+        {error && (
+          <div className="error-message" aria-live="polite">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <FormField
@@ -85,7 +89,14 @@ const Register = () => {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 title={showPassword ? 'Hide password' : 'Show password'}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.8em', color: '#888' }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontSize: '0.8em',
+                  color: '#888',
+                }}
               >
                 {showPassword ? 'Hide' : 'Show'}
               </button>
@@ -105,7 +116,14 @@ const Register = () => {
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.8em', color: '#888' }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontSize: '0.8em',
+                  color: '#888',
+                }}
               >
                 {showConfirmPassword ? 'Hide' : 'Show'}
               </button>

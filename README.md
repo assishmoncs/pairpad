@@ -12,76 +12,73 @@
 
 </div>
 
----
-
-PairPad is a full-stack collaborative coding platform built around a Monaco editor, Socket.IO real-time sync, and an integrated code execution engine. Multiple users can join a shared room, edit the same code simultaneously, chat, run code, and see each other's presence — all in the browser.
-
----
+PairPad is a full-stack collaborative coding platform built around Monaco Editor, Socket.IO, a conflict-free sequence CRDT, persistent room state and revision history, remote cursors, role-based access, workspace files, interview mode, and integrated code execution. Multiple users can join a room, edit documents concurrently, compare revisions, restore checkpoints, chat, execute code, and collaborate directly in the browser.
 
 ## Features
 
 | Category | What It Does |
-|----------|-------------|
-| **Authentication** | Register, login, JWT sessions, auth retry on server hiccup |
-| **Rooms** | Create rooms with 6-character invite codes, join/leave/delete, multi-language support |
-| **Live Editing** | Monaco Editor with full-document Socket.IO synchronization |
-| **Presence** | Real-time list of who is online in the current room |
-| **Chat** | Persistent in-room messaging (MongoDB-backed) with real-time broadcast |
-| **Code Execution** | Judge0 API integration (RapidAPI or self-hosted) with automatic **local fallback** for JS/TS/Python |
-| **Security** | Rate limiting on auth and execution endpoints, CORS guard, centralized error handling |
-| **Resilience** | Infinite socket reconnection, amber pulsing "Reconnecting…" badge, transient auth-unavailable state |
+|---|---|
+| **Authentication** | Register, login, rotating JWT access/refresh sessions, logout-all, and safer HttpOnly refresh-cookie storage |
+| **Rooms** | Create, join, leave, delete, transfer ownership, and manage member roles |
+| **Live Editing** | Monaco Editor backed by a deterministic sequence CRDT; concurrent edits converge without last-write-wins document replacement |
+| **Remote Cursors** | Throttled cursor/selection broadcasting with deterministic collaborator colors and hover names |
+| **Presence** | Real-time list of connected room members with reconnect cleanup and Redis-backed multi-instance support |
+| **Roles** | Owner, editor, and viewer permissions enforced by REST and Socket.IO and mirrored by the UI |
+| **Revision History** | Automatic checkpoints, manual checkpoints, comparisons, authorship metadata, and owner-only restore |
+| **Workspace** | Multi-file tree with create, rename, delete, language detection, per-file CRDT state, and active-file execution |
+| **Interview Mode** | Problem statements, candidate assignment, timer, public/hidden tests, lifecycle controls, and safe hidden-result redaction |
+| **Chat** | MongoDB-backed persistent room messaging with real-time delivery |
+| **Code Execution** | Judge0 integration plus an optional isolated execution worker |
+| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, isolated execution, and protected metrics |
+| **Resilience** | Socket reconnection, room rejoin, CRDT recovery, distributed document state, document restore propagation, and health/readiness probes |
+| **Observability** | Structured request logs, request IDs, latency counters, status counters, and Prometheus-compatible metrics |
+| **Accessibility** | Skip navigation, keyboard focus styling, reduced-motion support, semantic controls, and automated browser accessibility gates |
 
-### Current Limitations (MVP)
+## Room roles
 
-- Concurrent edits use **last-write-wins** (CRDT/OT not yet implemented)
-- Presence is tracked **in-memory** — not suitable for multi-server deployments without Redis
-- Editor snapshots are **debounced** (500 ms), so a hard crash can lose the most recent keystrokes
+| Role | View | Edit | Execute | Create checkpoint | Manage members | Transfer ownership | Restore | Delete room |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Owner | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Editor | Yes | Yes | Yes | Yes | No | No | No | No |
+| Viewer | Yes | No | No | No | No | No | No | No |
 
----
+The server remains authoritative; hiding UI controls is never used as a security boundary.
+
+## Accessibility
+
+PairPad includes automated browser checks for accessible names, form labels, image alternatives, keyboard navigation hygiene, and visible focus. It also provides skip navigation, route-focus management, and reduced-motion support. See `docs/ACCESSIBILITY.md` for the release gate and manual WCAG review checklist.
 
 ## Tech Stack
 
 | Layer | Technologies |
-|-------|-------------|
+|---|---|
 | **Frontend** | React 18, Vite, React Router v6, Axios, Socket.IO Client, Monaco Editor |
-| **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit |
-| **Code Execution** | Judge0 CE (RapidAPI or self-hosted) · local Node.js / Python fallback when key is absent |
-| **Testing** | Backend: Jest 29 + Supertest (214 tests / 17 suites, ~79% coverage) · Frontend: Vitest + Testing Library (30 tests, ~86% coverage) |
-| **Tooling** | ESLint + Prettier (both apps) · GitHub Actions CI (lint → test → build) · coverage thresholds enforced |
-
----
-
-## Prerequisites
-
-| Tool | Version | Notes |
-|------|---------|-------|
-| **Node.js** | 18 or higher | Required |
-| **MongoDB** | Any (local or Atlas) | Required |
-| **Judge0 API Key** | Optional | Code execution falls back to local runner without it |
-
----
+| **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet, Redis adapter |
+| **Collaboration** | Dependency-free sequence CRDT over authenticated Socket.IO transport |
+| **Code Execution** | Judge0 CE + optional isolated execution worker |
+| **Testing** | Jest + Supertest · Vitest + Testing Library · Playwright |
+| **Tooling** | ESLint + Prettier · GitHub Actions · CodeQL · Dependabot |
 
 ## Quick Start
 
-### 1 — Clone
-
 ```bash
-git clone https://github.com/tsunade601/pairpad.git
+git clone https://github.com/assishmoncs/pairpad.git
 cd pairpad
 ```
 
-### 2 — Configure & Start the Backend
+### Backend
 
 ```bash
 cd backend
 npm install
-cp .env.example .env          # then fill in MONGODB_URI and JWT_SECRET
+cp .env.example .env
+# fill in MONGODB_URI and JWT_SECRET
 npm run dev
 ```
 
-The API starts on `http://localhost:5000`. Health check: `GET /health`.
+Backend: `http://localhost:5000` · health: `GET /health` · readiness: `GET /ready` · metrics: `GET /metrics`.
 
-### 3 — Start the Frontend
+### Frontend
 
 ```bash
 cd ../frontend
@@ -89,241 +86,54 @@ npm install
 npm run dev
 ```
 
-The app runs on `http://localhost:5173`. Vite proxies `/api` and `/socket.io` to the backend automatically.
+Frontend: `http://localhost:5173`.
 
----
-
-## Environment Variables
-
-Copy and edit the backend environment template:
+### Docker
 
 ```bash
-cp backend/.env.example backend/.env
+docker compose up --build
 ```
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `PORT` | Backend port (default: `5000`) | Yes |
-| `MONGODB_URI` | MongoDB connection string | Yes |
-| `JWT_SECRET` | JWT signing secret (use a long random string) | Yes |
-| `JWT_EXPIRES_IN` | Token lifetime, e.g. `7d` | No (default: 7d) |
-| `CLIENT_URL` | Allowed browser origin for CORS and Socket.IO | Yes |
-| `JUDGE0_BASE_URL` | Judge0 API base URL | No |
-| `JUDGE0_API_KEY` | RapidAPI or self-hosted key | No |
-| `JUDGE0_RAPIDAPI_HOST` | RapidAPI host header | No |
-| `LOG_LEVEL` | Logging level: `fatal`/`error`/`warn`/`info`/`debug` | No (default: debug) |
-| `ALLOW_LOCAL_EXECUTION` | Enable the unsandboxed local runner in production (`true` to enable) | No (default: disabled in prod) |
+The Compose stack includes MongoDB, Redis, backend, frontend, and the optional execution worker. Production local execution remains disabled by default.
 
-> **Without a Judge0 key:** in development, JavaScript, TypeScript, and Python execute via the local Node.js / Python runner. Other languages require a configured Judge0 instance. In production the local runner is disabled unless `ALLOW_LOCAL_EXECUTION=true` — prefer an isolated Judge0 instance.
+## API & Operations
 
----
+The REST contract is exposed at `/api/openapi.yaml` with a human-readable documentation landing page at `/api/docs`. Operational metrics are exposed through `/metrics`; in production this endpoint requires `METRICS_TOKEN`.
 
-## Project Structure
+## Testing
 
-```
-pairpad/
-├── backend/
-│   ├── src/
-│   │   ├── config/          # MongoDB connection
-│   │   ├── controllers/     # auth, rooms, code execution, ownership transfer
-│   │   ├── middleware/       # JWT auth, rate limiting, request id, error handler
-│   │   ├── models/          # User, Room, Message (Mongoose)
-│   │   ├── routes/          # Express route definitions
-│   │   ├── services/        # Judge0 client + hardened local fallback runner
-│   │   ├── sockets/         # Socket.IO collaboration handler (rate-limited, debounced)
-│   │   ├── utils/           # logger, asyncHandler, validation, room access, token
-│   │   └── server.js        # Entry point (health/readiness probes, graceful shutdown)
-│   ├── tests/               # 17 Jest test suites (214 tests, coverage thresholds)
-│   ├── eslint.config.cjs    # ESLint (Node + Jest)
-│   └── .env.example
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # FormField, LanguageSelect, ChatPanel, ExecutionPanel
-│   │   ├── constants/       # Supported languages list
-│   │   ├── context/         # AuthContext (JWT + auth status machine)
-│   │   ├── hooks/           # useAsyncAction, useChat, useCodeExecution, useCollaboration
-│   │   ├── pages/           # Login, Register, Dashboard, Room
-│   │   ├── routes/          # AppRoutes + ProtectedRoute
-│   │   ├── services/        # SocketService singleton
-│   │   ├── utils/           # apiError, messages (appendUniqueMessage)
-│   │   └── main.jsx         # Vite entry point
-│   ├── index.html
-│   ├── eslint.config.js     # ESLint flat config (React + hooks + Vitest)
-│   ├── .prettierrc.json
-│   └── vite.config.js       # Vite + proxy + coverage thresholds
-├── .github/workflows/ci.yml # Lint → test (coverage) → build for both apps
-├── docs/
-│   ├── system-design.md
-│   ├── DEPLOYMENT.md
-├── .editorconfig
-├── README.md
-└── LICENSE
-```
+Backend: `npm test` · frontend: `npm test` / `npm run test:coverage` · browser: `npx playwright test`.
 
----
+CI provisions MongoDB and Redis, runs lint/format/test/build checks, browser collaboration tests, security flows, performance budgets, and accessibility gates. Browser failures retain screenshots, traces, video, and server logs.
 
-## API Reference
+## Release
 
-### Authentication
+Releases use semantic version tags such as `v1.0.0`. The release workflow validates the source, builds and publishes immutable backend, frontend, and execution-worker images to GitHub Container Registry, records source provenance, and provides a smoke-test stage. See `docs/RELEASE.md` for promotion and rollback guidance.
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `POST` | `/api/auth/register` | — | Create account → returns `{ token, refreshToken, user }` |
-| `POST` | `/api/auth/login` | — | Authenticate → returns `{ token, refreshToken, user }` |
-| `POST` | `/api/auth/refresh` | — | Refresh access token → returns `{ token, refreshToken }` |
-| `GET` | `/api/auth/me` | Bearer | Get the current user |
+The backend lockfile currently needs regeneration in a network-enabled environment after the Redis dependencies were added; until that is done, CI intentionally uses `npm install` rather than pretending `npm ci` is reproducible.
 
-### Rooms
+## Quality status
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `POST` | `/api/rooms` | Bearer | Create a room |
-| `GET` | `/api/rooms` | Bearer | List all rooms for the current user |
-| `GET` | `/api/rooms/:identifier` | Bearer | Get room by code or ID |
-| `POST` | `/api/rooms/:roomCode/join` | Bearer | Join a room |
-| `POST` | `/api/rooms/:roomCode/leave` | Bearer | Leave a room |
-| `POST` | `/api/rooms/:roomCode/transfer` | Bearer | Transfer ownership to a member (owner only) |
-| `DELETE` | `/api/rooms/:roomCode` | Bearer | Delete a room (owner only) |
+- [x] Repository quality baseline and security automation
+- [x] Docker deployment foundation
+- [x] CRDT-based concurrent collaboration
+- [x] Remote Monaco cursors and presence cleanup
+- [x] Owner/editor/viewer authorization
+- [x] Revision history, comparison, checkpoints, and restore
+- [x] Rotating refresh-token sessions / hardened cookies
+- [x] Redis-backed horizontal Socket.IO scaling
+- [x] Isolated execution worker integration
+- [x] Playwright E2E and adversarial security suites
+- [x] OpenAPI contract
+- [x] Interview mode with hidden test cases
+- [x] Multi-file workspace
+- [x] Observability baseline
+- [x] Performance budgets and load-test gates
+- [x] Automated accessibility gate
+- [x] Release and rollback runbook
 
-### Health
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `GET` | `/health` | — | Liveness probe (`status: ok`, uptime) |
-| `GET` | `/ready` | — | Readiness probe (DB connected → `200`, otherwise `503`) |
-
-### Messages & Execution
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `GET` | `/api/messages/room/:roomCode` | Bearer | Chat history (last 50 messages) |
-| `POST` | `/api/execute` | Bearer | Run code via Judge0 (or local fallback) |
-
-**Execute request body:**
-```json
-{
-  "source_code": "console.log('hello')",
-  "language": "javascript",
-  "roomCode": "ABC123",
-  "stdin": ""
-}
-```
-
-**Execute response shape:**
-```json
-{
-  "stdout": "hello\n",
-  "stderr": "",
-  "status": "success",
-  "time": "0.041s",
-  "memory": "N/A",
-  "exitCode": 0
-}
-```
-
----
-
-## Socket.IO Events
-
-All connections require `handshake.auth.token` (JWT). Room membership is verified before any `join-room` acknowledgement.
-
-### Client → Server
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `join-room` | `{ roomCode }` | Join a room channel |
-| `leave-room` | — | Leave the current room |
-| `code-change` | `{ content, language }` | Broadcast editor content |
-| `cursor-update` | `{ position, selection }` | Share cursor position |
-| `chat-message` | `{ content }` | Send a chat message |
-
-### Server → Client
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `presence-update` | `{ users[] }` | Updated online-user list |
-| `user-joined` | `{ userId, name }` | A user joined |
-| `user-left` | `{ userId, name }` | A user left |
-| `code-change` | `{ content, language, userId }` | Remote editor update |
-| `cursor-update` | `{ userId, position, selection }` | Remote cursor move |
-| `chat-message` | `{ _id, content, sender, createdAt }` | New chat message |
-| `code-execution-result` | `{ result, executedBy, language }` | Broadcast execution output |
-| `room-deleted` | — | Room was deleted by owner |
-
----
-
-## Available Scripts
-
-### Backend
-
-```bash
-cd backend
-npm run dev          # Hot-reload dev server (nodemon)
-npm start            # Production server
-npm test             # Full Jest suite with coverage (thresholds enforced)
-npm run test:unit    # Unit tests only (no MongoDB needed)
-npm run test:watch   # Watch mode
-npm run lint         # ESLint
-npm run lint:fix     # Auto-fix lint issues
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm run dev          # Vite dev server with HMR
-npm run build        # Production bundle → dist/
-npm test             # Vitest run (all tests)
-npm run test:coverage# Vitest with coverage (thresholds enforced)
-npm run lint         # ESLint
-npm run format       # Prettier write
-npm run preview      # Preview the production build
-```
-
----
-
-## Code Execution — How It Works
-
-PairPad uses a two-tier execution pipeline:
-
-1. **Judge0 API** — if `JUDGE0_API_KEY` is set and valid, code is submitted to Judge0 (RapidAPI or self-hosted). Supports all languages in the `LANGUAGE_MAP` (JS, TS, Python, Java, C, C++, Go, Rust, PHP, Ruby).
-
-2. **Local fallback** — if the key is absent, is the placeholder value, or if Judge0 returns an error, PairPad can execute **JavaScript/TypeScript** with the local `node` runtime and **Python** with the local `python`/`python3` runtime. This runs in a child process with a scrubbed environment (no app secrets), a 5-second timeout, a 128 MB heap cap, and a 1 MB output cap.
-
-> ⚠️ **Security note:** the local runner is a *resource guard, not a full sandbox* (no container/seccomp/cgroups). It is **disabled in production unless `ALLOW_LOCAL_EXECUTION=true` is set**. Prefer a fully isolated runner (Judge0 / containerized) in production.
-
-Results are returned in the HTTP response **and** broadcast to the entire room via `code-execution-result`.
-
----
-
-## Roadmap
-
-- [x] Persistent editor snapshots on the Room document (debounced persistence)
-- [x] `stdin` input textarea in the Run Code panel
-- [x] Room invite code shown in-header with copy-to-clipboard
-- [x] Ownership transfer (owner → member)
-- [x] CI/CD pipeline (GitHub Actions) with lint, format, test, and coverage gates
-- [x] Hardened local code execution (env scrubbing + resource limits + production gating)
-- [x] Centralized error handling with request-ids + structured logging + `/health`/`/ready`
-- [ ] CRDT / Operational Transform for conflict-free concurrent editing
-- [ ] Remote cursor rendering in Monaco (delta decorations)
-- [ ] Role-based permissions (owner / editor / viewer)
-- [ ] Redis adapter for multi-instance Socket.IO horizontal scaling
-- [ ] Docker Compose setup with a single `docker compose up`
-- [ ] Interview mode — countdown timer, problem packs, hidden test cases
-
----
-
-## Contributing
-
-1. Fork and create a feature branch from `main`
-2. Keep changes focused; one concern per PR
-3. Add or update tests when modifying API or socket behavior
-4. Ensure `npm test` passes in both `backend/` and `frontend/` before opening a PR
-5. Open a pull request with a clear description
-
----
+See `docs/RBAC.md`, `docs/system-design.md`, `docs/DEPLOYMENT.md`, `docs/RELEASE.md`, `docs/ACCESSIBILITY.md`, `docs/PERFORMANCE.md`, and `docs/QUALITY_BASELINE.md`.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE) for details.
+MIT — see [LICENSE](./LICENSE).

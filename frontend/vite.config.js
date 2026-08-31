@@ -18,6 +18,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
     globals: true,
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
@@ -41,11 +42,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:5000',
+        target: process.env.VITE_API_URL || 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: process.env.VITE_SOCKET_URL || 'http://localhost:5000',
+        target: process.env.VITE_SOCKET_URL || 'http://127.0.0.1:5000',
         changeOrigin: true,
         ws: true,
       },

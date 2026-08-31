@@ -40,11 +40,7 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchRooms();
-  }, []);
-
-  const fetchRooms = async () => {
+  const fetchRooms = React.useCallback(async () => {
     try {
       const response = await axios.get('/api/rooms');
       setRooms(response.data.data.rooms);
@@ -53,7 +49,11 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
 
   const handleCreateRoom = async (e) => {
     e.preventDefault();
@@ -119,7 +119,11 @@ const Dashboard = () => {
         </button>
       </header>
 
-      {error && <div className="error-message" aria-live="polite">{error}</div>}
+      {error && (
+        <div className="error-message" aria-live="polite">
+          {error}
+        </div>
+      )}
 
       <div className="dashboard-content">
         <div className="rooms-section">

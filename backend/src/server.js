@@ -1,7 +1,3 @@
-// Main backend entry point for PairPad.
-// Initializes Express, applies middleware, mounts routes, starts the HTTP server,
-// and sets up Socket.IO.
-
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,17 +7,21 @@ const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 const logger = require('./utils/logger');
+const { toPrometheus } = require('./utils/metrics');
 const authRoutes = require('./routes/authRoutes');
 const roomRoutes = require('./routes/roomRoutes');
+const revisionRoutes = require('./routes/revisionRoutes');
+const interviewRoutes = require('./routes/interviewRoutes');
+const workspaceRoutes = require('./routes/workspaceRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const executeRoutes = require('./routes/executeRoutes');
-const initializeSocket = require('./sockets/socketHandler');
+const openApiRoutes = require('./routes/openApiRoutes');
+const initializeSocket = require('./sockets/socketHandlerDistributed');
+const { initializeCrdtSocket } = require('./sockets/crdtSocketHandler');
+const { configureSocketScaling, isSocketScalingEnabled } = require('./services/socketScaling');
+const { isRedisReady } = require('./services/redisService');
 const { apiLimiter, authLimiter, executeLimiter } = require('./middleware/rateLimiter');
-const {
-  requestLogger,
-  notFoundMiddleware,
-  errorHandler,
-} = require('./middleware/errorHandler');
+const { requestLogger, notFoundMiddleware, errorHandler } = require('./middleware/errorHandler');
 
 if (!process.env.JWT_SECRET) {
   logger.error('JWT_SECRET is not set. Refusing to start without a signing secret.');
@@ -30,118 +30,100 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-// Comma-separated list of allowed browser origins
-const ALLOWED_ORIGINS = (process.env.CLIENT_URL || 'http://localhost:5173')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const ALLOWED_ORIGINS = Array.from(
+  new Set([
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    ...(process.env.CLIENT_URL || '').split(',').map((origin) => origin.trim()).filter(Boolean),
+  ])
+);
+const METRICS_TOKEN = process.env.METRICS_TOKEN || '';
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser clients (no Origin header) and explicitly allowed origins
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-      return callback(null, true);
-    }
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
     return callback(new Error('Origin not allowed by CORS'));
   },
   credentials: true,
 };
 
-// Security headers with Helmet.
-// CSP is enabled for production-grade hardening. `connect-src` allows self plus
-// the Socket.IO endpoint; dev-tools/WebSockets are covered by 'self' and 'ws:'.
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:'],
-        fontSrc: ["'self'"],
-        connectSrc: ["'self'", 'ws:', 'wss:'],
-        objectSrc: ["'none'"],
-        baseUri: ["'self'"],
-        frameAncestors: ["'none'"],
-      },
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'"],
+      connectSrc: ["'self'", 'ws:', 'wss:'],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
     },
-  })
-);
-
+  },
+}));
 app.use(cors(corsOptions));
 app.use(requestLogger);
+app.use(express.json({ limit: '1mb' }));
 
-// Parse JSON bodies
-app.use(express.json({ limit: '1mb' })); // Limit body size
-
-// Liveness probe — the process is up.
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'pairpad-backend', uptime: process.uptime() });
+  res.json({ status: 'ok', service: 'pairpad-backend', uptime: process.uptime(), scaling: isSocketScalingEnabled() ? 'redis' : 'single-node' });
 });
 
-// Readiness probe — the process can serve traffic (DB reachable).
 app.get('/ready', async (_req, res) => {
-  const dbState = mongoose.connection.readyState; // 1 = connected
-  if (dbState === 1) {
-    return res.json({ status: 'ready', db: 'connected' });
+  const dbConnected = mongoose.connection.readyState === 1;
+  const redisRequired = process.env.REDIS_REQUIRED === 'true';
+  const redisConnected = isRedisReady();
+  if (dbConnected && (!redisRequired || redisConnected)) {
+    return res.json({ status: 'ready', db: 'connected', redis: redisConnected ? 'connected' : 'not_configured' });
   }
-  res.status(503).json({ status: 'not_ready', db: 'disconnected' });
+  return res.status(503).json({ status: 'not_ready', db: dbConnected ? 'connected' : 'disconnected', redis: redisConnected ? 'connected' : 'disconnected' });
 });
 
-// General API rate limiter must run before the routes it protects
-app.use('/api', apiLimiter);
+app.get('/metrics', (req, res) => {
+  const providedToken = req.get('x-metrics-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (process.env.NODE_ENV === 'production' && (!METRICS_TOKEN || providedToken !== METRICS_TOKEN)) {
+    return res.status(404).end();
+  }
+  if (METRICS_TOKEN && providedToken !== METRICS_TOKEN) {
+    return res.status(401).json({ status: 'fail', code: 'METRICS_UNAUTHORIZED', message: 'Metrics authentication required.' });
+  }
+  res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+  return res.send(toPrometheus());
+});
 
-// Mount API routes with endpoint-specific rate limiting
+app.use('/api', apiLimiter);
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/rooms', revisionRoutes);
+app.use('/api/rooms', interviewRoutes);
+app.use('/api/rooms', workspaceRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/execute', executeLimiter, executeRoutes);
-
-// 404 handler for undefined routes
+app.use('/api', openApiRoutes);
 app.use(notFoundMiddleware);
-
-// Global error handler (must be last)
 app.use(errorHandler);
 
-// Create HTTP server from Express app
 const server = http.createServer(app);
-
-// Handle server listen errors (e.g. EADDRINUSE)
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    logger.error(`Port ${PORT} is already in use by another process. Please free port ${PORT} or update PORT in .env.`);
-  } else {
-    logger.error('Server error', { message: error.message });
-  }
-  process.exit(1);
-});
-
-// Initialize Socket.IO
-const io = new Server(server, {
-  cors: {
-    origin: ALLOWED_ORIGINS,
-    credentials: true,
-  },
-});
-
-// Store io instance for access in routes
+const io = new Server(server, { cors: { origin: ALLOWED_ORIGINS, credentials: true } });
 app.set('io', io);
 
-// Attach Socket.IO handler
 initializeSocket(io);
+initializeCrdtSocket(io);
 
-// Connect to MongoDB and start server
 async function startServer() {
   try {
     await connectDB();
-
+    await configureSocketScaling(io);
     server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`Health endpoint: http://localhost:${PORT}/health`);
       logger.info(`Readiness endpoint: http://localhost:${PORT}/ready`);
-      logger.info(`API routes: /api/auth/*, /api/rooms/*, /api/messages/*`);
-      logger.info('Socket.IO ready for real-time collaboration');
+      logger.info(`Metrics endpoint: http://localhost:${PORT}/metrics`);
+      logger.info(`API contract: http://localhost:${PORT}/api/openapi.yaml`);
+      logger.info(`API docs: http://localhost:${PORT}/api/docs`);
+      logger.info(`Socket.IO mode: ${isSocketScalingEnabled() ? 'Redis multi-instance' : 'single-node fallback'}`);
     });
   } catch (error) {
     logger.error('Failed to start server', { message: error.message });
@@ -149,21 +131,17 @@ async function startServer() {
   }
 }
 
-// Graceful shutdown handling
 let shuttingDown = false;
 const shutdown = (signal) => {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info(`${signal} received, shutting down gracefully...`);
-
   io.close(() => {
     server.close(() => {
       logger.info('Server closed');
       process.exit(0);
     });
   });
-
-  // Force-exit if graceful close hangs.
   setTimeout(() => {
     logger.error('Forced shutdown after timeout');
     process.exit(1);
@@ -172,27 +150,36 @@ const shutdown = (signal) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
-
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught exception', { stack: error.stack });
   process.exit(1);
 });
-
 process.on('unhandledRejection', (reason) => {
   const message = reason instanceof Error ? reason.stack || reason.message : reason;
   logger.error('Unhandled promise rejection', { message });
   shutdown('unhandledRejection');
 });
 
-// Expose a close helper for integration tests.
 app.close = (cb) => {
-  if (io) io.close();
-  server.close(cb);
+  try {
+    io.close();
+  } catch { /* ignore */ }
+  if (typeof cb === 'function') {
+    try {
+      server.close(() => cb());
+    } catch {
+      cb();
+    }
+  } else {
+    return new Promise((resolve) => {
+      try {
+        server.close(() => resolve());
+      } catch {
+        resolve();
+      }
+    });
+  }
 };
 
-// Start the server (connects to MongoDB first). Integration tests only require
-// this module after confirming MongoDB is reachable, mirroring the original
-// behaviour.
 startServer();
-
 module.exports = app;

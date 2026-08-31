@@ -1,0 +1,16 @@
+import { useEffect } from 'react';
+import { buildCursorDecoration } from '../utils/cursor';
+import '../styles/remoteCursors.css';
+
+export const useRemoteCursors = (editor, remoteCursors) => {
+  useEffect(() => {
+    if (!editor) return undefined;
+    const model = editor.getModel();
+    if (!model) return undefined;
+    const decorations = [...remoteCursors.values()]
+      .map((cursor) => buildCursorDecoration({ cursor, editorLineCount: model.getLineCount() }))
+      .filter(Boolean);
+    const collection = editor.createDecorationsCollection(decorations);
+    return () => collection.clear();
+  }, [editor, remoteCursors]);
+};

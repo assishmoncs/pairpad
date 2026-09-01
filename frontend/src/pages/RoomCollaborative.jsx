@@ -427,33 +427,38 @@ export default function RoomCollaborative() {
           </div>
 
           {activeFile ? (
-            <Editor
-              height="calc(100% - 50px)"
-              language={language}
-              value={code}
-              theme="vs-dark"
-              loading={<LoadingSpinner label="Loading Monaco Editor..." />}
-              onMount={onEditorMount}
-              onChange={async (value) => {
-                if (value === undefined || !crdt.crdtReady || !canEdit) return;
-                setCode(value);
-                setSaving(true);
-                try {
-                  await crdt.handleLocalChange(value);
-                } finally {
-                  if (mounted.current) setSaving(false);
-                }
-              }}
-              options={{
-                minimap: { enabled: true },
-                fontSize: 14,
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                readOnly: !crdt.crdtReady || !canEdit || switchingFile,
-                padding: { top: 8 },
-                lineNumbersMinChars: 3,
-              }}
-            />
+            <>
+              <Editor
+                height="calc(100% - 50px)"
+                language={language}
+                value={code}
+                theme="vs-dark"
+                loading={<LoadingSpinner label="Loading Monaco Editor..." />}
+                onMount={onEditorMount}
+                onChange={async (value) => {
+                  if (value === undefined || !crdt.crdtReady || !canEdit) return;
+                  setCode(value);
+                  setSaving(true);
+                  try {
+                    await crdt.handleLocalChange(value);
+                  } finally {
+                    if (mounted.current) setSaving(false);
+                  }
+                }}
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: 14,
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  readOnly: !crdt.crdtReady || !canEdit || switchingFile,
+                  padding: { top: 8 },
+                  lineNumbersMinChars: 3,
+                }}
+              />
+              <pre data-testid="collaborative-editor-content" hidden>
+                {code}
+              </pre>
+            </>
           ) : (
             <div className="workspace-empty-editor">
               <h2>Select a file</h2>

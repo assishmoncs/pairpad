@@ -32,11 +32,11 @@ const LANGUAGE_MAP = {
   cpp: 54,             // C++ (GCC 9.2.0)
   cplusplus: 54,
   c: 50,               // C (GCC 9.2.0)
-  java: 62,            // Java (OpenJDK 13.0.1)
-  go: 60,              // Go (1.13.5)
-  rust: 73,            // Rust (1.40.0)
-  php: 68,             // PHP (8.2.3)
-  ruby: 72,            // Ruby (2.7.0)
+  java: 62,             // Java (OpenJDK 13.0.1)
+  go: 60,               // Go (1.13.5)
+  rust: 73,             // Rust (1.40.0)
+  php: 68,              // PHP (8.2.3)
+  ruby: 72,             // Ruby (2.7.0)
   typescript: 74,      // TypeScript (5.0.3)
 };
 
@@ -115,7 +115,7 @@ async function executeLocally(sourceCode, language, stdin = '') {
 
   let cmd = '';
   let args = [];
-  let fileExt = '.txt';
+  let fileExt;
 
   if (lang === 'javascript' || lang === 'typescript') {
     cmd = 'node';
@@ -389,7 +389,7 @@ async function pollForResult(token, maxAttempts = 30, delay = 500) {
         await new Promise((resolve) => setTimeout(resolve, delay));
         attempts++;
       } else {
-        throw new Error(`Failed to fetch execution result: ${error.message}`);
+        throw new Error(`Failed to fetch execution result: ${error.message}`, { cause: error });
       }
     }
   }

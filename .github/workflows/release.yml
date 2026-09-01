@@ -106,7 +106,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v6
         id: backend_meta
         with:
           images: ghcr.io/${{ github.repository }}/backend
@@ -121,7 +121,7 @@ jobs:
           labels: ${{ steps.backend_meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v6
         id: frontend_meta
         with:
           images: ghcr.io/${{ github.repository }}/frontend
@@ -136,7 +136,7 @@ jobs:
           labels: ${{ steps.frontend_meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v6
         id: worker_meta
         with:
           images: ghcr.io/${{ github.repository }}/execution-worker

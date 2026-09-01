@@ -7,9 +7,19 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          monaco: ['@monaco-editor/react'],
-          vendor: ['react', 'react-dom', 'react-router-dom', 'axios', 'socket.io-client'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('@monaco-editor/react')) return 'monaco';
+          if (
+            id.includes('react') ||
+            id.includes('react-dom') ||
+            id.includes('react-router-dom') ||
+            id.includes('axios') ||
+            id.includes('socket.io-client')
+          ) {
+            return 'vendor';
+          }
+          return undefined;
         },
       },
     },

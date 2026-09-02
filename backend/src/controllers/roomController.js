@@ -2,6 +2,9 @@ const mongoose = require('mongoose');
 const logger = require('../utils/logger');
 const Room = require('../models/Room');
 const Message = require('../models/Message');
+const Revision = require('../models/Revision');
+const WorkspaceFile = require('../models/WorkspaceFile');
+const { deleteState } = require('../services/redisDocumentState');
 const { validateRoomName, sanitizeString } = require('../utils/validation');
 const { sendSuccess, sendError, sendValidationError } = require('../utils/apiResponse');
 const { ROLES, getMemberRole } = require('../utils/roomPermissions');
@@ -180,7 +183,13 @@ const deleteRoom = async (req, res) => {
     if (!room) return sendError(res, 404, 'Room not found.');
     if (getMemberRole(room, req.user._id) !== ROLES.OWNER) return sendError(res, 403, 'Only the room owner can delete this room.');
 
-    await Promise.all([Message.deleteMany({ room: room._id }), Room.deleteOne({ _id: room._id })]);
+    await Promise.all([
+      Message.deleteMany({ room: room._id }),
+      Revision.deleteMany({ room: room._id }),
+      WorkspaceFile.deleteMany({ room: room._id }),
+      Room.deleteOne({ _id: room._id }),
+      deleteState(room.roomCode),
+    ]);
     req.app.get('io')?.to(`room:${room.roomCode}`).emit('room-deleted', { roomCode: room.roomCode });
     sendSuccess(res, 'Room deleted successfully.');
   } catch (error) {

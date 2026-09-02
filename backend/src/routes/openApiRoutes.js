@@ -1,8 +1,15 @@
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 
 const router = express.Router();
-const OPENAPI_PATH = path.resolve(__dirname, '../../../docs/openapi.yaml');
+const candidatePaths = [
+  path.resolve(__dirname, '../../../docs/openapi.yaml'),
+  path.resolve(__dirname, '../../docs/openapi.yaml'),
+  path.resolve(__dirname, '../docs/openapi.yaml'),
+  path.resolve(__dirname, './openapi.yaml'),
+];
+const OPENAPI_PATH = candidatePaths.find((p) => fs.existsSync(p)) || candidatePaths[0];
 
 router.get('/openapi.yaml', (_req, res) => {
   return res.type('application/yaml').sendFile(OPENAPI_PATH);

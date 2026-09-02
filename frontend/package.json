@@ -28,6 +28,9 @@
     "react-router-dom": "^6.26.0",
     "socket.io-client": "^4.8.0"
   },
+  "overrides": {
+    "dompurify": "^3.4.14"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.58.2",

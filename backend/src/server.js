@@ -29,6 +29,7 @@ if (!process.env.JWT_SECRET) {
 }
 
 const app = express();
+app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
 const PORT = process.env.PORT || 5000;
 const ALLOWED_ORIGINS = Array.from(
   new Set([

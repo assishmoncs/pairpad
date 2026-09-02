@@ -96,7 +96,9 @@ const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
     env: { PATH: process.env.PATH || '/usr/bin:/bin' },
   });
 
+  let timedOut = false;
   const timeout = setTimeout(() => {
+    timedOut = true;
     try { spawn('docker', ['kill', jobId]); } catch {}
     try { child.kill('SIGKILL'); } catch {}
   }, EXECUTION_TIMEOUT_MS);
@@ -124,18 +126,18 @@ const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
 
   child.on('close', async (code, signal) => {
     clearTimeout(timeout);
-    const timedOut = Date.now() - start >= EXECUTION_TIMEOUT_MS && code === null;
+    const isTimeout = timedOut || (Date.now() - start >= EXECUTION_TIMEOUT_MS);
     const outputError = overflow ? `Output exceeded ${MAX_OUTPUT_BYTES} bytes.` : '';
     await finish({
       stdout: stdout.value,
       stderr: [stderr.value, outputError].filter(Boolean).join('\n'),
       output: stdout.value,
-      status: timedOut ? 'time_limit_exceeded' : code === 0 ? 'success' : 'runtime_error',
+      status: isTimeout ? 'time_limit_exceeded' : code === 0 ? 'success' : 'runtime_error',
       // statusCode is Judge0 compatible
-      statusCode: timedOut ? 5 : code === 0 ? 3 : 8,
+      statusCode: isTimeout ? 5 : code === 0 ? 3 : 8,
       time: `${(Math.min(Date.now() - start, EXECUTION_TIMEOUT_MS) / 1000).toFixed(3)}s`,
       exitCode: code,
-      signal: signal || (timedOut ? 'SIGKILL' : null),
+      signal: signal || (isTimeout ? 'SIGKILL' : null),
     });
   });
 

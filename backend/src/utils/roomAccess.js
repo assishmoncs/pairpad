@@ -42,8 +42,9 @@ const findPopulatedRoomsForMember = (userId) =>
 const refId = (ref) => (ref?._id || ref).toString();
 
 const isRoomParticipant = (room, userId) => {
+  if (!room || !userId) return false;
   const id = userId.toString();
-  return room.members.some((member) => refId(member) === id) || refId(room.owner) === id;
+  return (room.members || []).some((member) => refId(member) === id) || (room.owner ? refId(room.owner) === id : false);
 };
 
 const getRoomRole = (room, userId) => getMemberRole(room, userId);

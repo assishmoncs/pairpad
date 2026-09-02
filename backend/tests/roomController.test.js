@@ -10,9 +10,21 @@ jest.mock('../src/models/User', () => ({}));
 jest.mock('../src/models/Message', () => ({
   deleteMany: jest.fn(),
 }));
+jest.mock('../src/models/Revision', () => ({
+  deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+}));
+jest.mock('../src/models/WorkspaceFile', () => ({
+  deleteMany: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+}));
+jest.mock('../src/services/redisDocumentState', () => ({
+  deleteState: jest.fn().mockResolvedValue(true),
+}));
 
 const Room = require('../src/models/Room');
 const Message = require('../src/models/Message');
+const Revision = require('../src/models/Revision');
+const WorkspaceFile = require('../src/models/WorkspaceFile');
+const { deleteState } = require('../src/services/redisDocumentState');
 const {
   createRoom,
   getUserRooms,
@@ -554,6 +566,8 @@ describe('deleteRoom', () => {
     );
 
     expect(Message.deleteMany).toHaveBeenCalledWith({ room: 'room-1' });
+    expect(Revision.deleteMany).toHaveBeenCalledWith({ room: 'room-1' });
+    expect(WorkspaceFile.deleteMany).toHaveBeenCalledWith({ room: 'room-1' });
     expect(Room.deleteOne).toHaveBeenCalledWith({ _id: 'room-1' });
     expect(to).toHaveBeenCalledWith('room:ABC123');
     expect(emit).toHaveBeenCalledWith('room-deleted', { roomCode: 'ABC123' });

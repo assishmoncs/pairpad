@@ -1,6 +1,7 @@
 const express = require('express');
 const asyncHandler = require('../utils/asyncHandler');
 const authMiddleware = require('../middleware/auth');
+const { authLimiter } = require('../middleware/rateLimiter');
 const {
   register,
   login,
@@ -12,9 +13,9 @@ const {
 
 const router = express.Router();
 
-router.post('/register', asyncHandler(register));
-router.post('/login', asyncHandler(login));
-router.post('/refresh', asyncHandler(refreshAccessToken));
+router.post('/register', authLimiter, asyncHandler(register));
+router.post('/login', authLimiter, asyncHandler(login));
+router.post('/refresh', authLimiter, asyncHandler(refreshAccessToken));
 router.post('/logout', asyncHandler(logout));
 router.get('/me', authMiddleware, asyncHandler(getMe));
 router.post('/logout-all', authMiddleware, asyncHandler(logoutAll));

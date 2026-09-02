@@ -29,10 +29,10 @@ const normalizePath = (value) => {
   if (typeof value !== 'string') return '';
 
   const raw = value.trim().replaceAll('\\', '/');
-  if (!raw || raw.length > 240) return '';
+  if (!raw || raw.length > 240 || raw.includes('..')) return '';
 
   const parts = raw.split('/').filter(Boolean);
-  if (parts.length === 0 || parts.some((part) => part === '..' || !isSafePathPart(part))) return '';
+  if (parts.length === 0 || parts.some((part) => !isSafePathPart(part))) return '';
 
   return parts.join('/');
 };

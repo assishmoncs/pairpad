@@ -27,10 +27,19 @@ function sanitizeString(str) {
  * @returns {boolean} - True if valid
  */
 function isValidEmail(email) {
-  if (typeof email !== 'string') return false;
-  
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email) && email.length <= 254;
+  if (typeof email !== 'string' || email.length === 0 || email.length > 254) return false;
+
+  const atIndex = email.indexOf('@');
+  if (atIndex <= 0 || atIndex === email.length - 1) return false;
+
+  let dotAfterAt = -1;
+  for (let i = atIndex + 1; i < email.length; i += 1) {
+    const char = email[i];
+    if (char === '@' || char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f') return false;
+    if (char === '.' && dotAfterAt === -1) dotAfterAt = i;
+  }
+
+  return dotAfterAt > atIndex + 1 && dotAfterAt < email.length - 1;
 }
 
 /**
@@ -74,10 +83,13 @@ function validateRoomName(name) {
     return { valid: false, error: 'Room name must not exceed 50 characters.' };
   }
   
-  // Allow alphanumeric, spaces, hyphens, underscores
-  const nameRegex = /^[a-zA-Z0-9\s\-_]+$/;
-  if (!nameRegex.test(trimmed)) {
-    return { valid: false, error: 'Room name can only contain letters, numbers, spaces, hyphens, and underscores.' };
+  // Allow alphanumeric, spaces, hyphens, underscores without a backtracking regex.
+  for (const char of trimmed) {
+    const code = char.charCodeAt(0);
+    const alphanumeric = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    if (!alphanumeric && char !== ' ' && char !== '-' && char !== '_') {
+      return { valid: false, error: 'Room name can only contain letters, numbers, spaces, hyphens, and underscores.' };
+    }
   }
   
   return { valid: true, value: trimmed };

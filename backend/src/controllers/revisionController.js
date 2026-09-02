@@ -38,9 +38,11 @@ const getRevisionDiff = async (req, res) => {
     const { from, to } = req.query;
     if (!from || !mongoose.isValidObjectId(from)) return sendError(res, 400, 'A valid from revision id is required.');
     if (!to || !mongoose.isValidObjectId(to)) return sendError(res, 400, 'A valid to revision id is required.');
+    const fromRevisionId = new mongoose.Types.ObjectId(from);
+    const toRevisionId = new mongoose.Types.ObjectId(to);
     const [fromRevision, toRevision] = await Promise.all([
-      Revision.findOne({ _id: from, room: room._id }).select('_id content language createdAt').lean(),
-      Revision.findOne({ _id: to, room: room._id }).select('_id content language createdAt').lean(),
+      Revision.findOne({ _id: fromRevisionId, room: room._id }).select('_id content language createdAt').lean(),
+      Revision.findOne({ _id: toRevisionId, room: room._id }).select('_id content language createdAt').lean(),
     ]);
     if (!fromRevision || !toRevision) return sendError(res, 404, 'One or both revisions were not found.');
     return sendSuccess(res, 'Revision comparison retrieved successfully.', {

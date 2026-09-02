@@ -1,17 +1,18 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DIST = new URL('../dist/assets/', import.meta.url);
+const DIST = fileURLToPath(new URL('../dist/assets/', import.meta.url));
 const TOTAL_JS_BUDGET = Number(process.env.PERF_JS_TOTAL_BYTES || 2500000);
 const MAX_JS_BUDGET = Number(process.env.PERF_JS_MAX_BYTES || 1000000);
 
-async function walk(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
+async function walk(directoryPath) {
+  const entries = await readdir(directoryPath, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
-    const path = join(directory.pathname, entry.name);
-    if (entry.isDirectory()) files.push(...await walk(new URL(`./${entry.name}/`, directory)));
-    else files.push(path);
+    const fullPath = join(directoryPath, entry.name);
+    if (entry.isDirectory()) files.push(...await walk(fullPath));
+    else files.push(fullPath);
   }
   return files;
 }

@@ -25,6 +25,7 @@ export default defineConfig({
     },
   },
   test: {
+    pool: 'threads',
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
     globals: true,

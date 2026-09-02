@@ -15,13 +15,26 @@ const EXTENSIONS = {
   rb: 'ruby',
 };
 
+const isSafePathPart = (part) => {
+  if (!part || part.length > 240) return false;
+  for (const char of part) {
+    const code = char.charCodeAt(0);
+    const alphanumeric = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    if (!alphanumeric && char !== '.' && char !== '_' && char !== '-') return false;
+  }
+  return true;
+};
+
 const normalizePath = (value) => {
   if (typeof value !== 'string') return '';
-  const normalized = value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/').trim();
-  if (!normalized || normalized.includes('..') || normalized.length > 240) return '';
-  const parts = normalized.split('/');
-  if (parts.some((part) => !/^[A-Za-z0-9._-]+$/.test(part))) return '';
-  return normalized;
+
+  const raw = value.trim().replaceAll('\\', '/');
+  if (!raw || raw.length > 240) return '';
+
+  const parts = raw.split('/').filter(Boolean);
+  if (parts.length === 0 || parts.some((part) => part === '..' || !isSafePathPart(part))) return '';
+
+  return parts.join('/');
 };
 
 const detectLanguage = (filePath, requested) => {

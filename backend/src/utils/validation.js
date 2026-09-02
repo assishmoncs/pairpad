@@ -33,10 +33,10 @@ function isValidEmail(email) {
   if (atIndex <= 0 || atIndex === email.length - 1) return false;
 
   let dotAfterAt = -1;
-  for (let i = atIndex + 1; i < email.length; i += 1) {
+  for (let i = 0; i < email.length; i += 1) {
     const char = email[i];
-    if (char === '@' || char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f') return false;
-    if (char === '.' && dotAfterAt === -1) dotAfterAt = i;
+    if (char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f' || (i !== atIndex && char === '@')) return false;
+    if (i > atIndex && char === '.' && dotAfterAt === -1) dotAfterAt = i;
   }
 
   return dotAfterAt > atIndex + 1 && dotAfterAt < email.length - 1;

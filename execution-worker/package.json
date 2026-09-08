@@ -8,8 +8,5 @@
   },
   "dependencies": {
     "express": "^4.19.2"
-  },
-  "overrides": {
-    "qs": "^6.16.0"
   }
 }

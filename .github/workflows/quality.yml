@@ -271,10 +271,18 @@ jobs:
         working-directory: backend
         run: |
           nohup npm start > /tmp/pairpad-backend.log 2>&1 &
+          ready=false
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:5000/health > /dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:5000/health > /dev/null; then
+              ready=true
+              break
+            fi
             sleep 2
           done
+          if [ "$ready" != "true" ]; then
+            echo "Backend did not become healthy in time"
+            exit 1
+          fi
           curl -fsS http://127.0.0.1:5000/health
       - name: Install frontend dependencies
         working-directory: frontend
@@ -288,6 +296,19 @@ jobs:
           PAIRPAD_BASE_URL: http://127.0.0.1:5173
         run: |
           nohup npm run dev -- --host 127.0.0.1 > /tmp/pairpad-frontend.log 2>&1 &
+          frontend_ready=false
+          for i in {1..30}; do
+            if curl -fsS "$PAIRPAD_BASE_URL/" > /dev/null; then
+              frontend_ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$frontend_ready" != "true" ]; then
+            echo "Frontend did not become ready in time"
+            cat /tmp/pairpad-frontend.log
+            exit 1
+          fi
           npx playwright test
       - name: Upload Playwright report
         if: always()

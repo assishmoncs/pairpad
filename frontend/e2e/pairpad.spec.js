@@ -124,11 +124,17 @@ test.describe('PairPad collaboration smoke flow', () => {
 
     const ownerEditor = owner.locator('.monaco-editor').last();
     await expect(ownerEditor).toBeVisible({ timeout: 30000 });
-    await ownerEditor.click();
-    await owner.keyboard.insertText('console.log("shared");');
+    const ownerEditorInput = owner.locator('.monaco-editor textarea.inputarea').last();
+    await expect(ownerEditorInput).toBeVisible({ timeout: 30000 });
+    await ownerEditorInput.click();
+    await ownerEditorInput.fill('console.log("shared");');
 
     const collaboratorEditor = collaborator.locator('.monaco-editor').last();
     await expect(collaboratorEditor).toBeVisible({ timeout: 30000 });
+
+    const ownerContent = owner.getByTestId('collaborative-editor-content');
+    await expect(ownerContent).toHaveText(/console\.log/, { timeout: 30000 });
+    await expect(ownerContent).toHaveText(/shared/, { timeout: 30000 });
 
     const collaboratorContent = collaborator.getByTestId('collaborative-editor-content');
     await expect(collaboratorContent).toHaveText(/console\.log/, { timeout: 30000 });

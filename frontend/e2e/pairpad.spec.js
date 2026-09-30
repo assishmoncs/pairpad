@@ -124,20 +124,25 @@ test.describe('PairPad collaboration smoke flow', () => {
     await expect(owner.getByText('src/main.js')).toBeVisible({ timeout: 30000 });
     await expect(collaborator.getByText('src/main.js')).toBeVisible({ timeout: 30000 });
 
+    const ownerContent = owner.getByTestId('collaborative-editor-content');
     const ownerEditor = owner.locator('.monaco-editor').last();
+
     await expect(ownerEditor).toBeVisible({ timeout: 30000 });
-    const ownerCrdtStatus = owner.locator('.crdt-status');
-    await expect(ownerCrdtStatus).toHaveText(/Live CRDT/, { timeout: 30000 });
+    await expect(ownerEditor.locator('.view-lines')).toBeVisible({ timeout: 30000 });
+    await expect(owner.locator('.crdt-status')).toHaveText(/Live CRDT/, {
+      timeout: 30000,
+    });
 
     const collaboratorEditor = collaborator.locator('.monaco-editor').last();
     await expect(collaboratorEditor).toBeVisible({ timeout: 30000 });
     const collaboratorCrdtStatus = collaborator.locator('.crdt-status');
-    await expect(collaboratorCrdtStatus).toHaveText(/Live CRDT/, { timeout: 30000 });
+    await expect(collaboratorCrdtStatus).toHaveText(/Live CRDT/, {
+      timeout: 30000,
+    });
 
-    const ownerContent = owner.getByTestId('collaborative-editor-content');
-    const ownerEditorInput = owner.locator('.monaco-editor textarea.inputarea').last();
-    await expect(ownerEditorInput).toBeAttached({ timeout: 30000 });
-    await ownerEditorInput.fill('console.log("shared");');
+    await ownerEditor.click();
+    await owner.keyboard.press('ControlOrMeta+A');
+    await owner.keyboard.insertText('console.log("shared");');
 
     await expect(ownerContent).toHaveText(/console\.log/, { timeout: 30000 });
     await expect(ownerContent).toHaveText(/shared/, { timeout: 30000 });

@@ -54,7 +54,7 @@ export const useCrdtCollaboration = ({
   }, [fileId]);
 
   useEffect(() => {
-    if (!enabled || !room) return undefined;
+    if (!enabled || !roomCode || !room) return undefined;
 
     setCrdtReady(false);
     setCrdtError('');
@@ -170,7 +170,7 @@ export const useCrdtCollaboration = ({
     };
   }, [
     enabled,
-    room,
+    Boolean(room),
     roomCode,
     fileId,
     emitText,

@@ -48,7 +48,7 @@ jobs:
       REDIS_REQUIRED: 'true'
       CLIENT_URL: http://127.0.0.1:5173
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -120,7 +120,7 @@ jobs:
       PERF_P95_MS: 250
       PERF_ERROR_RATE: 0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -190,7 +190,7 @@ jobs:
       REDIS_REQUIRED: 'false'
       CLIENT_URL: http://127.0.0.1:5173
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -283,7 +283,7 @@ jobs:
       REDIS_REQUIRED: 'false'
       CLIENT_URL: http://127.0.0.1:5173
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22

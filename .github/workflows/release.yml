@@ -171,7 +171,7 @@ jobs:
             echo "version=${{ github.ref_name }}"
             echo "release_images=backend,frontend,execution-worker"
           } > release-artifacts/provenance.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-provenance
           path: release-artifacts/provenance.txt

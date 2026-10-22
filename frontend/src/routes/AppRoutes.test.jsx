@@ -99,7 +99,7 @@ describe('auth pages', () => {
     renderApp('/login');
 
     await userEvent.type(screen.getByLabelText(/email/i), user.email);
-    await userEvent.type(screen.getByLabelText(/password/i), 'password123');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'password123');
     await userEvent.click(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {

@@ -108,6 +108,7 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     env:
+      RUNNER_TRACKING_ID: ''
       NODE_ENV: test
       JWT_SECRET: ci_perf_secret_replace_for_real_deployments
       MONGODB_URI: mongodb://127.0.0.1:27017/pairpad_perf
@@ -181,6 +182,7 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     env:
+      RUNNER_TRACKING_ID: ''
       NODE_ENV: test
       JWT_SECRET: ci_a11y_secret_replace_for_real_deployments
       MONGODB_URI: mongodb://127.0.0.1:27017/pairpad_a11y
@@ -214,19 +216,26 @@ jobs:
       - name: Install Playwright browser
         working-directory: frontend
         run: npx playwright install --with-deps chromium
-      - name: Start frontend
-        working-directory: frontend
-        run: |
-          nohup npm run dev -- --host 127.0.0.1 > /tmp/pairpad-a11y-frontend.log 2>&1 &
-          for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:5173/ > /dev/null; then break; fi
-            sleep 2
-          done
       - name: Run accessibility browser gate
         working-directory: frontend
         env:
           PAIRPAD_BASE_URL: http://127.0.0.1:5173
-        run: npx playwright test e2e/accessibility.spec.js
+        run: |
+          nohup npm run dev -- --host 127.0.0.1 > /tmp/pairpad-a11y-frontend.log 2>&1 &
+          frontend_ready=false
+          for i in {1..30}; do
+            if curl -fsS "$PAIRPAD_BASE_URL/" > /dev/null; then
+              frontend_ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$frontend_ready" != "true" ]; then
+            echo "Frontend did not become ready in time"
+            cat /tmp/pairpad-a11y-frontend.log
+            exit 1
+          fi
+          npx playwright test e2e/accessibility.spec.js
       - name: Upload accessibility artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -266,6 +275,7 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     env:
+      RUNNER_TRACKING_ID: ''
       NODE_ENV: test
       JWT_SECRET: ci_e2e_secret_replace_for_real_deployments
       MONGODB_URI: mongodb://127.0.0.1:27017/pairpad_e2e

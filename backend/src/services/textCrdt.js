@@ -52,7 +52,11 @@ const deserializeState = (serialized) => {
 
 const compareIds = (a, b) => b.localeCompare(a);
 
-/** Return all node ids in deterministic document order, including tombstones. */
+/**
+ * Return all node ids in deterministic document order, including tombstones.
+ * Uses an iterative explicit stack with cycle protection to prevent call-stack
+ * overflows on large documents (>= 10k chars) or malformed cyclic anchors.
+ */
 const orderedIds = (nodes) => {
   const children = new Map();
 
@@ -65,23 +69,40 @@ const orderedIds = (nodes) => {
 
   for (const node of nodes.values()) {
     // Missing/tombstoned parents are still valid insertion anchors. Treat a
-    // missing parent as root so partially persisted/merged states remain usable.
-    addChild(node.after && nodes.has(node.after) ? node.after : null, node.id);
+    // missing or self-referential parent as root so partially persisted/merged
+    // states remain usable.
+    const parentId =
+      node.after && node.after !== node.id && nodes.has(node.after) ? node.after : null;
+    addChild(parentId, node.id);
   }
 
   for (const list of children.values()) list.sort(compareIds);
 
   const result = [];
-  const visit = (parent) => {
-    const key = parent || '__root__';
-    const list = children.get(key) || [];
-    for (const id of list) {
-      result.push(id);
-      visit(id);
-    }
-  };
+  const visited = new Set();
+  const rootList = children.get('__root__') || [];
+  const stack = [];
 
-  visit(null);
+  for (let i = rootList.length - 1; i >= 0; i -= 1) {
+    stack.push(rootList[i]);
+  }
+
+  while (stack.length > 0) {
+    const id = stack.pop();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    result.push(id);
+
+    const childList = children.get(id);
+    if (childList) {
+      for (let i = childList.length - 1; i >= 0; i -= 1) {
+        if (!visited.has(childList[i])) {
+          stack.push(childList[i]);
+        }
+      }
+    }
+  }
+
   return result;
 };
 
@@ -91,7 +112,10 @@ const visibleEntries = (nodes) =>
     .filter(Boolean)
     .filter((node) => !node.deleted);
 
-const visibleText = (nodes) => visibleEntries(nodes).map((node) => node.char).join('');
+const visibleText = (nodes) =>
+  visibleEntries(nodes)
+    .map((node) => node.char)
+    .join('');
 
 const createInitialState = (text = '') => {
   const nodes = new Map();

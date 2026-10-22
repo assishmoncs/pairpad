@@ -33,6 +33,8 @@ pids/
 *.sqlite3
 
 # Test / CI reports
+test-results/
+playwright-report/
 test-results.json
 backend-test-results.json
 

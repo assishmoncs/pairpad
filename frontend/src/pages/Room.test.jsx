@@ -6,7 +6,7 @@ import Room, { appendUniqueMessage } from './Room';
 import socketService from '../services/socketService';
 
 vi.mock('@monaco-editor/react', () => ({
-  default: function MockEditor({ value, onMount }) {
+  default: ({ value, onMount }) => {
     React.useEffect(() => {
       onMount?.({});
     }, [onMount]);

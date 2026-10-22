@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import socketService from '../services/socketService';
+import { cursorColorForUser, cursorColorKeyForUser } from '../utils/cursor';
 
 export const useCollaboration = ({
   room,
@@ -85,7 +86,14 @@ export const useCollaboration = ({
     const unsubCursor = socketService.on('cursor-update', (cursor = {}) => {
       if (!cursor.userId) return;
       const userId = String(cursor.userId);
-      setRemoteCursors((current) => new Map(current).set(userId, cursor));
+      const enrichedCursor = {
+        ...cursor,
+        userId,
+        name: cursor.name || cursor.userName || 'Collaborator',
+        colorKey: cursor.colorKey ?? cursorColorKeyForUser(userId),
+        color: cursor.color || cursorColorForUser(userId),
+      };
+      setRemoteCursors((current) => new Map(current).set(userId, enrichedCursor));
       const previousTimer = cursorExpiryTimersRef.current.get(userId);
       if (previousTimer) clearTimeout(previousTimer);
       cursorExpiryTimersRef.current.set(

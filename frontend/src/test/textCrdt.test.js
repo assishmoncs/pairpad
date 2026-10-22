@@ -46,4 +46,11 @@ describe('TextCrdt', () => {
     expect(a.applyReplaceOperation(op)).toBe(false);
     expect(a.getText()).toBe(before);
   });
+
+  test('handles large documents (15,000+ chars) without call-stack overflow', () => {
+    const a = new TextCrdt('client-a');
+    const largeText = 'a'.repeat(15000);
+    a.replaceText(largeText);
+    expect(a.getText()).toHaveLength(15000);
+  });
 });

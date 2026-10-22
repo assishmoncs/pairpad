@@ -23,6 +23,7 @@ export const useCrdtCollaboration = ({
   const sendQueuesRef = useRef(new Map());
   const [crdtReady, setCrdtReady] = useState(false);
   const [crdtError, setCrdtError] = useState('');
+  const hasRoom = Boolean(room);
 
   const emitText = useCallback((text) => onChange?.(text), [onChange]);
 
@@ -54,7 +55,7 @@ export const useCrdtCollaboration = ({
   }, [fileId]);
 
   useEffect(() => {
-    if (!enabled || !roomCode || !room) return undefined;
+    if (!enabled || !roomCode || !hasRoom) return undefined;
 
     setCrdtReady(false);
     setCrdtError('');
@@ -98,7 +99,8 @@ export const useCrdtCollaboration = ({
         revisionId,
         fileId: restoredFileId,
       } = {}) => {
-        if ((restoredFileId || null) !== (fileId || null)) return;
+        if (restoredFileId && fileId && String(restoredFileId) !== String(fileId)) return;
+        if (restoredFileId && !fileId) return;
         if (!state) {
           setCrdtError('The restored document did not contain a valid collaborative state.');
           return;
@@ -116,7 +118,7 @@ export const useCrdtCollaboration = ({
           content,
           language,
           revisionId,
-          fileId: restoredFileId || null,
+          fileId: restoredFileId || fileId || null,
         });
       };
 
@@ -170,7 +172,7 @@ export const useCrdtCollaboration = ({
     };
   }, [
     enabled,
-    Boolean(room),
+    hasRoom,
     roomCode,
     fileId,
     emitText,

@@ -34,6 +34,7 @@ const ChatPanel = ({
     <form onSubmit={handleSendMessage} className="chat-form">
       <input
         type="text"
+        aria-label="Chat message"
         value={newMessage}
         onChange={(e) => setNewMessage(e.target.value)}
         placeholder="Type a message..."

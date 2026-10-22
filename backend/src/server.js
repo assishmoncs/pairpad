@@ -1,4 +1,5 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -20,13 +21,20 @@ const initializeSocket = require('./sockets/socketHandlerDistributed');
 const { initializeCrdtSocket } = require('./sockets/crdtSocketHandler');
 const { configureSocketScaling, isSocketScalingEnabled } = require('./services/socketScaling');
 const { isRedisReady } = require('./services/redisService');
-const { apiLimiter, authLimiter, executeLimiter } = require('./middleware/rateLimiter');
+const { apiLimiter, executeLimiter } = require('./middleware/rateLimiter');
 const { requestLogger, notFoundMiddleware, errorHandler } = require('./middleware/errorHandler');
 
 if (!process.env.JWT_SECRET) {
   logger.error('JWT_SECRET is not set. Refusing to start without a signing secret.');
   process.exit(1);
 }
+
+const constantTimeEqual = (left, right) => {
+  if (!left || !right) return false;
+  const a = crypto.createHmac('sha256', 'pairpad-metrics-auth').update(String(left)).digest();
+  const b = crypto.createHmac('sha256', 'pairpad-metrics-auth').update(String(right)).digest();
+  return crypto.timingSafeEqual(a, b);
+};
 
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -35,10 +43,12 @@ const ALLOWED_ORIGINS = Array.from(
   new Set([
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    ...(process.env.CLIENT_URL || '').split(',').map((origin) => origin.trim()).filter(Boolean),
+    ...(process.env.CLIENT_URL || '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   ])
 );
-const METRICS_TOKEN = process.env.METRICS_TOKEN || '';
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -48,28 +58,35 @@ const corsOptions = {
   credentials: true,
 };
 
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:'],
-      fontSrc: ["'self'"],
-      connectSrc: ["'self'", 'ws:', 'wss:'],
-      objectSrc: ["'none'"],
-      baseUri: ["'self'"],
-      frameAncestors: ["'none'"],
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
     },
-  },
-}));
+  })
+);
 app.use(cors(corsOptions));
 app.use(requestLogger);
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'pairpad-backend', uptime: process.uptime(), scaling: isSocketScalingEnabled() ? 'redis' : 'single-node' });
+  res.json({
+    status: 'ok',
+    service: 'pairpad-backend',
+    uptime: process.uptime(),
+    scaling: isSocketScalingEnabled() ? 'redis' : 'single-node',
+  });
 });
 
 app.get('/ready', async (_req, res) => {
@@ -77,25 +94,41 @@ app.get('/ready', async (_req, res) => {
   const redisRequired = process.env.REDIS_REQUIRED === 'true';
   const redisConnected = isRedisReady();
   if (dbConnected && (!redisRequired || redisConnected)) {
-    return res.json({ status: 'ready', db: 'connected', redis: redisConnected ? 'connected' : 'not_configured' });
+    return res.json({
+      status: 'ready',
+      db: 'connected',
+      redis: redisConnected ? 'connected' : 'not_configured',
+    });
   }
-  return res.status(503).json({ status: 'not_ready', db: dbConnected ? 'connected' : 'disconnected', redis: redisConnected ? 'connected' : 'disconnected' });
+  return res.status(503).json({
+    status: 'not_ready',
+    db: dbConnected ? 'connected' : 'disconnected',
+    redis: redisConnected ? 'connected' : 'disconnected',
+  });
 });
 
 app.get('/metrics', (req, res) => {
-  const providedToken = req.get('x-metrics-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  if (process.env.NODE_ENV === 'production' && (!METRICS_TOKEN || providedToken !== METRICS_TOKEN)) {
+  const configuredToken = process.env.METRICS_TOKEN || '';
+  const providedToken =
+    req.get('x-metrics-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const tokenValid = configuredToken && constantTimeEqual(providedToken, configuredToken);
+
+  if (process.env.NODE_ENV === 'production' && !tokenValid) {
     return res.status(404).end();
   }
-  if (METRICS_TOKEN && providedToken !== METRICS_TOKEN) {
-    return res.status(401).json({ status: 'fail', code: 'METRICS_UNAUTHORIZED', message: 'Metrics authentication required.' });
+  if (configuredToken && !tokenValid) {
+    return res.status(401).json({
+      status: 'fail',
+      code: 'METRICS_UNAUTHORIZED',
+      message: 'Metrics authentication required.',
+    });
   }
   res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
   return res.send(toPrometheus());
 });
 
 app.use('/api', apiLimiter);
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/rooms', revisionRoutes);
 app.use('/api/rooms', interviewRoutes);
@@ -124,7 +157,9 @@ async function startServer() {
       logger.info(`Metrics endpoint: http://localhost:${PORT}/metrics`);
       logger.info(`API contract: http://localhost:${PORT}/api/openapi.yaml`);
       logger.info(`API docs: http://localhost:${PORT}/api/docs`);
-      logger.info(`Socket.IO mode: ${isSocketScalingEnabled() ? 'Redis multi-instance' : 'single-node fallback'}`);
+      logger.info(
+        `Socket.IO mode: ${isSocketScalingEnabled() ? 'Redis multi-instance' : 'single-node fallback'}`
+      );
     });
   } catch (error) {
     logger.error('Failed to start server', { message: error.message });

@@ -28,7 +28,7 @@ export class TextCrdt {
 
       for (const raw of parsed.nodes) {
         if (!raw || typeof raw.id !== 'string' || typeof raw.char !== 'string') continue;
-        if (raw.char.length !== 1 || this.nodes.size >= MAX_NODES) continue;
+        if (raw.char.length !== 1 || raw.id.length > 160 || this.nodes.size >= MAX_NODES) continue;
         this.nodes.set(raw.id, cloneNode(raw));
 
         if (raw.id.startsWith(`${this.clientId}:`)) {
@@ -60,20 +60,38 @@ export class TextCrdt {
     };
 
     for (const node of this.nodes.values()) {
-      addChild(node.after && this.nodes.has(node.after) ? node.after : null, node.id);
+      const parentId =
+        node.after && node.after !== node.id && this.nodes.has(node.after) ? node.after : null;
+      addChild(parentId, node.id);
     }
 
     for (const list of children.values()) list.sort(compareIds);
 
     const result = [];
-    const visit = (parent) => {
-      const key = parent || '__root__';
-      for (const id of children.get(key) || []) {
-        result.push(id);
-        visit(id);
+    const visited = new Set();
+    const rootList = children.get('__root__') || [];
+    const stack = [];
+
+    for (let i = rootList.length - 1; i >= 0; i -= 1) {
+      stack.push(rootList[i]);
+    }
+
+    while (stack.length > 0) {
+      const id = stack.pop();
+      if (visited.has(id)) continue;
+      visited.add(id);
+      result.push(id);
+
+      const childList = children.get(id);
+      if (childList) {
+        for (let i = childList.length - 1; i >= 0; i -= 1) {
+          if (!visited.has(childList[i])) {
+            stack.push(childList[i]);
+          }
+        }
       }
-    };
-    visit(null);
+    }
+
     return result;
   }
 
@@ -103,7 +121,13 @@ export class TextCrdt {
 
     for (const raw of operation.insert || []) {
       if (!raw || typeof raw.id !== 'string' || typeof raw.char !== 'string') continue;
-      if (raw.char.length !== 1 || this.nodes.size >= MAX_NODES || this.nodes.has(raw.id)) continue;
+      if (
+        raw.char.length !== 1 ||
+        raw.id.length > 160 ||
+        this.nodes.size >= MAX_NODES ||
+        this.nodes.has(raw.id)
+      )
+        continue;
       this.nodes.set(raw.id, {
         id: raw.id,
         char: raw.char,

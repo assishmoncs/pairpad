@@ -10,6 +10,7 @@ const FORWARDED_EVENTS = [
   'chat-message',
   'code-execution-result',
   'room-deleted',
+  'document-restored',
   'interview-updated',
   'interview-state-changed',
   'workspace-file-created',

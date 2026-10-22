@@ -196,7 +196,7 @@ describe('getUserRooms', () => {
     expect(Room.find).toHaveBeenCalledWith({ members: USER_ID });
     expect(res.json).toHaveBeenCalledWith({
       message: 'Rooms retrieved successfully.',
-      data: { rooms: rooms.map(r => ({ ...r, currentUserRole: null })), count: 2 },
+      data: { rooms: rooms.map((r) => ({ ...r, currentUserRole: null })), count: 2 },
     });
   });
 
@@ -403,8 +403,7 @@ describe('leaveRoom', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      message:
-        'Room owner cannot leave. Transfer ownership or delete the room instead.',
+      message: 'Room owner cannot leave. Transfer ownership or delete the room instead.',
     });
   });
 
@@ -569,6 +568,7 @@ describe('deleteRoom', () => {
     expect(Revision.deleteMany).toHaveBeenCalledWith({ room: 'room-1' });
     expect(WorkspaceFile.deleteMany).toHaveBeenCalledWith({ room: 'room-1' });
     expect(Room.deleteOne).toHaveBeenCalledWith({ _id: 'room-1' });
+    expect(deleteState).toHaveBeenCalledWith('ABC123');
     expect(to).toHaveBeenCalledWith('room:ABC123');
     expect(emit).toHaveBeenCalledWith('room-deleted', { roomCode: 'ABC123' });
     expect(res.json).toHaveBeenCalledWith({

@@ -72,7 +72,3 @@ Every release should record:
 - deployment timestamp
 
 The GitHub Actions release workflow uploads a provenance artifact containing the source commit and release reference.
-
-## 7. Dependency-lock limitation
-
-The current application manifests include Redis dependencies that require the backend lockfile to be regenerated with `npm install` in a network-enabled environment before switching CI from `npm install` to `npm ci`. Do not fabricate lockfile entries. Once regenerated, prefer `npm ci` for deterministic builds.

@@ -1,18 +1,23 @@
+jest.mock('../src/services/interviewService');
+jest.mock('../src/utils/roomAccess');
+jest.mock('../src/utils/apiResponse');
+
 const interviewController = require('../src/controllers/interviewController');
 const { getInterview, configureInterview, startInterview, submit } = interviewController;
 const interviewService = require('../src/services/interviewService');
 const roomAccess = require('../src/utils/roomAccess');
 const apiResponse = require('../src/utils/apiResponse');
 
-jest.mock('../src/services/interviewService');
-jest.mock('../src/utils/roomAccess');
-jest.mock('../src/utils/apiResponse');
-
 describe('interviewController', () => {
   let req, res;
   beforeEach(() => {
     jest.clearAllMocks();
-    req = { params: { roomCode: 'ROOM12' }, body: {}, user: { _id: 'user123' }, app: { get: jest.fn().mockReturnValue({ to: jest.fn().mockReturnValue({ emit: jest.fn() }) }) } };
+    req = {
+      params: { roomCode: 'ROOM12' },
+      body: {},
+      user: { _id: 'user123' },
+      app: { get: jest.fn().mockReturnValue({ to: jest.fn().mockReturnValue({ emit: jest.fn() }) }) },
+    };
     res = {};
     apiResponse.sendSuccess.mockImplementation(() => ({}));
     apiResponse.sendError.mockImplementation(() => ({}));
@@ -47,10 +52,16 @@ describe('interviewController', () => {
     roomAccess.getRoomRole.mockReturnValue('viewer');
     await startInterview(req, res);
   });
-  
+
   it('submits interview', async () => {
     req.body = { sourceCode: 'code', language: 'javascript' };
-    interviewService.submitCandidate.mockResolvedValue({ publicResults: [], hiddenResults: [], hiddenPassed: true, score: 100, total: 100 });
+    interviewService.submitCandidate.mockResolvedValue({
+      publicResults: [],
+      hiddenResults: [],
+      hiddenPassed: true,
+      score: 100,
+      total: 100,
+    });
     await submit(req, res);
     expect(apiResponse.sendSuccess).toHaveBeenCalled();
     req.body = {};

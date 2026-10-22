@@ -1,7 +1,7 @@
+jest.mock('../src/models/WorkspaceFile');
+
 const workspaceFileService = require('../src/services/workspaceFileService');
 const WorkspaceFile = require('../src/models/WorkspaceFile');
-
-jest.mock('../src/models/WorkspaceFile');
 
 describe('workspaceFileService', () => {
   beforeEach(() => {
@@ -16,8 +16,16 @@ describe('workspaceFileService', () => {
 
   it('validateFilePath', () => {
     expect(workspaceFileService.validateFilePath('valid.js')).toBe('valid.js');
-    try { workspaceFileService.validateFilePath('../invalid.js'); } catch { /* ignore */ }
-    try { workspaceFileService.validateFilePath('a'.repeat(300)); } catch { /* ignore */ }
+    try {
+      workspaceFileService.validateFilePath('../invalid.js');
+    } catch {
+      /* ignore */
+    }
+    try {
+      workspaceFileService.validateFilePath('a'.repeat(300));
+    } catch {
+      /* ignore */
+    }
   });
 
   it('listFiles', async () => {
@@ -32,7 +40,18 @@ describe('workspaceFileService', () => {
   });
 
   it('ensureDefaultFile handles language extensions', async () => {
-    const languages = ['python', 'cpp', 'c', 'java', 'go', 'rust', 'typescript', 'php', 'ruby', 'other'];
+    const languages = [
+      'python',
+      'cpp',
+      'c',
+      'java',
+      'go',
+      'rust',
+      'typescript',
+      'php',
+      'ruby',
+      'other',
+    ];
     for (const lang of languages) {
       WorkspaceFile.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
       WorkspaceFile.create.mockResolvedValue({ _id: '1', toObject: () => ({ _id: '1' }) });
@@ -52,7 +71,11 @@ describe('workspaceFileService', () => {
     WorkspaceFile.create.mockResolvedValue({ _id: '1', toObject: () => ({ _id: '1' }) });
     WorkspaceFile.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
 
-    await workspaceFileService.createFile({ _id: 'room1' }, 'u1', { name: 'f1.js', content: 'content', language: 'javascript' });
+    await workspaceFileService.createFile({ _id: 'room1' }, 'u1', {
+      name: 'f1.js',
+      content: 'content',
+      language: 'javascript',
+    });
     expect(WorkspaceFile.create).toHaveBeenCalled();
   });
 
@@ -71,8 +94,11 @@ describe('workspaceFileService', () => {
   });
 
   it('deleteFile', async () => {
-    WorkspaceFile.findOneAndDelete = jest.fn().mockResolvedValue({ _id: '1', toObject: () => ({ _id: '1' }) });
-    await workspaceFileService.deleteFile('room1', 'f1', 'u1');
+    WorkspaceFile.countDocuments = jest.fn().mockResolvedValue(2);
+    WorkspaceFile.findOneAndDelete = jest
+      .fn()
+      .mockResolvedValue({ _id: '1', toObject: () => ({ _id: '1' }) });
+    await workspaceFileService.deleteFile('room1', 'f1');
     expect(WorkspaceFile.findOneAndDelete).toHaveBeenCalled();
   });
 });

@@ -32,11 +32,11 @@ const LANGUAGE_MAP = {
   cpp: 54,             // C++ (GCC 9.2.0)
   cplusplus: 54,
   c: 50,               // C (GCC 9.2.0)
-  java: 62,             // Java (OpenJDK 13.0.1)
-  go: 60,               // Go (1.13.5)
-  rust: 73,             // Rust (1.40.0)
-  php: 68,              // PHP (8.2.3)
-  ruby: 72,             // Ruby (2.7.0)
+  java: 62,            // Java (OpenJDK 13.0.1)
+  go: 60,              // Go (1.13.5)
+  rust: 73,            // Rust (1.40.0)
+  php: 68,             // PHP (8.2.3)
+  ruby: 72,            // Ruby (2.7.0)
   typescript: 74,      // TypeScript (5.0.3)
 };
 
@@ -58,7 +58,9 @@ const isLocalExecutionAllowed = () => {
 
 // Log a warning at module load when local execution is allowed.
 if (isLocalExecutionAllowed() && process.env.NODE_ENV !== 'test') {
-  logger.warn('⚠️  Local code execution is ENABLED. User-submitted code runs on this host without container isolation.');
+  logger.warn(
+    '⚠️  Local code execution is ENABLED. User-submitted code runs on this host without container isolation.'
+  );
 }
 
 /** Environment for child processes: explicit allowlist, secrets never inherited. */
@@ -135,7 +137,7 @@ async function executeLocally(sourceCode, language, stdin = '') {
   let exceededBuffer = false;
 
   try {
-    await fs.promises.writeFile(filePath, sourceCode, 'utf8');
+    await fs.promises.writeFile(filePath, sourceCode, { encoding: 'utf8', mode: 0o600 });
   } catch (err) {
     logger.error('Failed to stage local execution file', { message: err.message });
     return null;
@@ -168,12 +170,24 @@ async function executeLocally(sourceCode, language, stdin = '') {
     });
 
     child.stdout.on('data', (chunk) => {
-      if (stdout.length + chunk.length <= MAX_OUTPUT_BYTES) stdout += chunk;
-      else exceededBuffer = true;
+      const text = chunk.toString('utf8');
+      if (stdout.length + text.length <= MAX_OUTPUT_BYTES) {
+        stdout += text;
+      } else {
+        const remaining = Math.max(0, MAX_OUTPUT_BYTES - stdout.length);
+        if (remaining > 0) stdout += text.slice(0, remaining);
+        exceededBuffer = true;
+      }
     });
     child.stderr.on('data', (chunk) => {
-      if (stderr.length + chunk.length <= MAX_OUTPUT_BYTES) stderr += chunk;
-      else exceededBuffer = true;
+      const text = chunk.toString('utf8');
+      if (stderr.length + text.length <= MAX_OUTPUT_BYTES) {
+        stderr += text;
+      } else {
+        const remaining = Math.max(0, MAX_OUTPUT_BYTES - stderr.length);
+        if (remaining > 0) stderr += text.slice(0, remaining);
+        exceededBuffer = true;
+      }
     });
 
     child.on('error', (err) => {
@@ -221,7 +235,7 @@ async function executeLocally(sourceCode, language, stdin = '') {
 
       if (exceededBuffer) {
         const extra = stderr ? `\n${stderr}` : '';
-        stderr = `${stderr || ''}Output exceeded ${MAX_OUTPUT_BYTES} bytes.${extra}`.trim();
+        stderr = `Output exceeded ${MAX_OUTPUT_BYTES} bytes.${extra}`.trim();
       }
 
       if (code === 0) {
@@ -251,10 +265,11 @@ async function executeLocally(sourceCode, language, stdin = '') {
       }
     });
 
-    if (stdin && child.stdin) {
-      child.stdin.write(stdin);
-    }
     if (child.stdin) {
+      child.stdin.on?.('error', () => {});
+      if (stdin) {
+        child.stdin.write(stdin);
+      }
       child.stdin.end();
     }
   });

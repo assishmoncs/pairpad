@@ -437,24 +437,27 @@ const TestEditor = ({ title, tests, kind, updateTest, addTest, removeTest }) => 
   <div className="test-editor">
     <div className="test-editor-heading">
       <h4>{title}</h4>
-      <button type="button" onClick={() => addTest(kind)}>
+      <button type="button" onClick={() => addTest(kind)} aria-label={`Add ${title} test`}>
         + Add
       </button>
     </div>
     {tests.map((test, index) => (
       <div className="test-editor-row" key={index}>
         <input
+          aria-label={`${title} ${index + 1} name`}
           placeholder="Test name"
           value={test.name}
           onChange={(event) => updateTest(kind, index, 'name', event.target.value)}
         />
         <textarea
+          aria-label={`${title} ${index + 1} stdin`}
           placeholder="stdin"
           rows={2}
           value={test.stdin}
           onChange={(event) => updateTest(kind, index, 'stdin', event.target.value)}
         />
         <textarea
+          aria-label={`${title} ${index + 1} expected output`}
           placeholder="expected output"
           rows={2}
           value={test.expectedOutput}

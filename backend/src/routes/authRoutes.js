@@ -9,11 +9,12 @@ const {
   logoutAll,
 } = require('../controllers/authSessionController');
 const authMiddleware = require('../middleware/auth');
+const { authLimiter } = require('../middleware/rateLimiter');
 const asyncHandler = require('../utils/asyncHandler');
 
-router.post('/register', asyncHandler(register));
-router.post('/login', asyncHandler(login));
-router.post('/refresh', asyncHandler(refreshAccessToken));
+router.post('/register', authLimiter, asyncHandler(register));
+router.post('/login', authLimiter, asyncHandler(login));
+router.post('/refresh', authLimiter, asyncHandler(refreshAccessToken));
 router.post('/logout', asyncHandler(logout));
 router.get('/me', authMiddleware, asyncHandler(getMe));
 router.post('/logout-all', authMiddleware, asyncHandler(logoutAll));

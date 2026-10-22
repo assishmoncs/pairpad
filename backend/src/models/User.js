@@ -45,9 +45,12 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Remove password from JSON output
+// Remove password from JSON output and expose `id` alongside `_id`
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
+  if (obj._id !== undefined && obj.id === undefined) {
+    obj.id = obj._id;
+  }
   delete obj.password;
   return obj;
 };

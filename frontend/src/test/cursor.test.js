@@ -48,6 +48,22 @@ describe('cursor helpers', () => {
     expect(decoration.options.hoverMessage.value).toContain('Alice');
   });
 
+  it('derives colorKey, color, and userName when raw socket payload is provided', () => {
+    const decoration = buildCursorDecoration({
+      cursor: {
+        userId: 'u2',
+        userName: 'Bob',
+        position: { line: 2, column: 2 },
+        selection: null,
+      },
+      editorLineCount: 10,
+    });
+    const expectedKey = cursorColorKeyForUser('u2');
+    expect(decoration.options.className).toContain(`remote-cursor-${expectedKey}`);
+    expect(decoration.options.hoverMessage.value).toContain('Bob');
+    expect(decoration.options.overviewRuler.color).toBe(cursorColorForUser('u2'));
+  });
+
   it('drops a cursor beyond the current document', () => {
     expect(
       buildCursorDecoration({

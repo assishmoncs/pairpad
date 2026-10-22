@@ -46,4 +46,23 @@ describe('text CRDT', () => {
     applyReplaceOperation(state, insert);
     expect(visibleText(state)).toBe('aXc');
   });
+
+  test('handles deep linear documents (15,000+ chars) without call-stack overflow', () => {
+    const largeText = 'x'.repeat(15000);
+    const state = createInitialState(largeText);
+    expect(visibleText(state)).toHaveLength(15000);
+  });
+
+  test('guards against cyclic parent anchors without infinite recursion', () => {
+    const corrupted = JSON.stringify({
+      version: 1,
+      nodes: [
+        { id: 'n1', char: 'a', after: null, deleted: false },
+        { id: 'n2', char: 'b', after: 'n3', deleted: false },
+        { id: 'n3', char: 'c', after: 'n2', deleted: false },
+      ],
+    });
+    const state = deserializeState(corrupted);
+    expect(visibleText(state)).toBe('a');
+  });
 });

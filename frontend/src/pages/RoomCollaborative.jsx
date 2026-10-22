@@ -26,6 +26,13 @@ import '../styles/workspaceFiles.css';
 
 const idOf = (value) => String(value?._id || value?.id || value || '');
 
+const disposeCursorListeners = (disposables) => {
+  for (const item of disposables) {
+    if (typeof item === 'function') item();
+    else item?.dispose?.();
+  }
+};
+
 export default function RoomCollaborative() {
   const { roomCode } = useParams();
   const navigate = useNavigate();
@@ -96,7 +103,8 @@ export default function RoomCollaborative() {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      cursorDisposables.current.forEach((dispose) => dispose());
+      disposeCursorListeners(cursorDisposables.current);
+      cursorDisposables.current = [];
       if (cursorTimer.current) clearTimeout(cursorTimer.current);
     };
   }, []);
@@ -184,11 +192,11 @@ export default function RoomCollaborative() {
   const onEditorMount = useCallback(
     (instance) => {
       setEditor(instance);
-      cursorDisposables.current.forEach((dispose) => dispose());
+      disposeCursorListeners(cursorDisposables.current);
       cursorDisposables.current = [
-        instance.onDidChangeCursorPosition(() => queueCursor(instance)),
-        instance.onDidChangeCursorSelection(() => queueCursor(instance)),
-      ];
+        instance.onDidChangeCursorPosition?.(() => queueCursor(instance)),
+        instance.onDidChangeCursorSelection?.(() => queueCursor(instance)),
+      ].filter(Boolean);
       queueCursor(instance);
     },
     [queueCursor]
@@ -504,6 +512,7 @@ export default function RoomCollaborative() {
             code={code}
             language={language}
             currentRole={currentRole}
+            activeFileId={activeFile?._id || null}
           />
           <ExecutionPanel
             executionResult={execution.executionResult}

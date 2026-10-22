@@ -16,13 +16,26 @@ const editor = '507f1f77bcf86cd799439012';
 const makeRoom = (status = 'draft') => ({
   owner,
   members: [owner, editor],
-  memberRoles: [{ user: owner, role: 'owner' }, { user: editor, role: 'editor' }],
+  memberRoles: [
+    { user: owner, role: 'owner' },
+    { user: editor, role: 'editor' },
+  ],
   interview: {
-    title: 'Test', description: 'Solve it', language: 'javascript', durationMinutes: 10,
-    status, startedAt: status === 'running' ? new Date() : null, pausedAt: null, endedAt: null,
-    remainingSeconds: 600, publicTests: [], hiddenTests: [],
+    title: 'Test',
+    description: 'Solve it',
+    language: 'javascript',
+    durationMinutes: 10,
+    status,
+    startedAt: status === 'running' ? new Date() : null,
+    pausedAt: null,
+    endedAt: null,
+    remainingSeconds: 600,
+    publicTests: [],
+    hiddenTests: [],
   },
-  save: jest.fn(async function save() { return this; }),
+  save: jest.fn(async function () {
+    return this;
+  }),
 });
 
 test('owner can start, pause, resume and end interview', async () => {

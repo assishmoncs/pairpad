@@ -29,10 +29,9 @@ async function runScenario(path) {
   let next = 0;
 
   const worker = async () => {
-    while (true) {
+    while (next < REQUESTS) {
       const index = next;
       next += 1;
-      if (index >= REQUESTS) return;
       results[index] = await timedGet(path);
     }
   };
@@ -56,7 +55,9 @@ async function runScenario(path) {
   console.log(JSON.stringify(summary));
 
   if (summary.errorRate > ERROR_RATE_BUDGET || summary.p95Ms > P95_BUDGET_MS) {
-    throw new Error(`Performance budget exceeded for ${path}: p95=${summary.p95Ms}ms, errorRate=${summary.errorRate}`);
+    throw new Error(
+      `Performance budget exceeded for ${path}: p95=${summary.p95Ms}ms, errorRate=${summary.errorRate}`
+    );
   }
 
   return summary;

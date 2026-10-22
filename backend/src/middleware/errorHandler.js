@@ -31,7 +31,8 @@ const AppError = ApiError;
 /** Attach/read a request id used for correlation across logs. */
 const getRequestId = (req) => {
   if (!req.requestId) {
-    req.requestId = req.headers && req.headers['x-request-id'] ? req.headers['x-request-id'] : randomUUID();
+    req.requestId =
+      req.headers && req.headers['x-request-id'] ? req.headers['x-request-id'] : randomUUID();
   }
   return req.requestId;
 };
@@ -62,7 +63,7 @@ const requestLogger = (req, res, next) => {
 };
 
 /** 404 for undefined routes. */
-const notFoundMiddleware = (req, res, next) => {
+const notFoundMiddleware = (req, _res, next) => {
   const error = new ApiError(404, `Route ${req.originalUrl} not found`, [], {
     code: 'ROUTE_NOT_FOUND',
   });
@@ -70,8 +71,7 @@ const notFoundMiddleware = (req, res, next) => {
 };
 
 /** Centralized error handler. Runs last. */
-// eslint-disable-next-line no-unused-vars
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
   const log = req && req.log ? req.log : logger;
 
   let statusCode = err.statusCode || 500;

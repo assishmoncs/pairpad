@@ -5,7 +5,7 @@
 **Real-time collaborative coding for pair programming, technical interviews, and shared code execution.**
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-4.x-010101?logo=socket.io)](https://socket.io)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20%2F%20Local-47A248?logo=mongodb&logoColor=white)](https://mongodb.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
@@ -29,7 +29,7 @@ PairPad is a full-stack collaborative coding platform built around Monaco Editor
 | **Interview Mode** | Problem statements, candidate assignment, timer, public/hidden tests, lifecycle controls, and safe hidden-result redaction |
 | **Chat** | MongoDB-backed persistent room messaging with real-time delivery |
 | **Code Execution** | Judge0 integration plus an optional isolated execution worker |
-| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, isolated execution, and protected metrics |
+| **Security** | Helmet/CSP, CORS allowlist, rate limiting, input limits, request correlation, role enforcement, isolated execution, and constant-time protected metrics |
 | **Resilience** | Socket reconnection, room rejoin, CRDT recovery, distributed document state, document restore propagation, and health/readiness probes |
 | **Observability** | Structured request logs, request IDs, latency counters, status counters, and Prometheus-compatible metrics |
 | **Accessibility** | Skip navigation, keyboard focus styling, reduced-motion support, semantic controls, and automated browser accessibility gates |
@@ -52,8 +52,8 @@ PairPad includes automated browser checks for accessible names, form labels, ima
 
 | Layer | Technologies |
 |---|---|
-| **Frontend** | React 18, Vite, React Router v6, Axios, Socket.IO Client, Monaco Editor |
-| **Backend** | Node.js 18+, Express 4, Socket.IO 4, MongoDB + Mongoose 8, JWT, bcryptjs, express-rate-limit, Helmet, Redis adapter |
+| **Frontend** | React 19, Vite, React Router v7, Axios, Socket.IO Client, Monaco Editor |
+| **Backend** | Node.js 18+, Express 5, Socket.IO 4, MongoDB + Mongoose 9, JWT, bcryptjs, express-rate-limit, Helmet, Redis adapter |
 | **Collaboration** | Dependency-free sequence CRDT over authenticated Socket.IO transport |
 | **Code Execution** | Judge0 CE + optional isolated execution worker |
 | **Testing** | Jest + Supertest · Vitest + Testing Library · Playwright |
@@ -70,7 +70,7 @@ cd pairpad
 
 ```bash
 cd backend
-npm install
+npm ci
 cp .env.example .env
 # fill in MONGODB_URI and JWT_SECRET
 npm run dev
@@ -82,7 +82,7 @@ Backend: `http://localhost:5000` · health: `GET /health` · readiness: `GET /re
 
 ```bash
 cd ../frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -109,8 +109,6 @@ CI provisions MongoDB and Redis, runs lint/format/test/build checks, browser col
 ## Release
 
 Releases use semantic version tags such as `v1.0.0`. The release workflow validates the source, builds and publishes immutable backend, frontend, and execution-worker images to GitHub Container Registry, records source provenance, and provides a smoke-test stage. See `docs/RELEASE.md` for promotion and rollback guidance.
-
-The backend lockfile currently needs regeneration in a network-enabled environment after the Redis dependencies were added; until that is done, CI intentionally uses `npm install` rather than pretending `npm ci` is reproducible.
 
 ## Quality status
 

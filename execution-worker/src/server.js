@@ -38,7 +38,9 @@ const authenticate = (req, res, next) => {
   return next();
 };
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'pairpad-execution-worker' }));
+app.get('/health', (_req, res) =>
+  res.json({ status: 'ok', service: 'pairpad-execution-worker' })
+);
 
 const appendBounded = (state, chunk) => {
   const text = chunk.toString('utf8');
@@ -50,114 +52,153 @@ const appendBounded = (state, chunk) => {
   return true;
 };
 
-const runDocker = ({ sourceCode, stdin }) => new Promise((resolve) => {
-  const jobId = `pairpad-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
-  const hostDir = fs.mkdtempSync(path.join(os.tmpdir(), `${jobId}-`));
-  const sourcePath = path.join(hostDir, 'main.js');
+const runDocker = ({ sourceCode, stdin }) =>
+  new Promise((resolve) => {
+    const jobId = `pairpad-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+    const hostDir = fs.mkdtempSync(path.join(os.tmpdir(), `${jobId}-`));
+    const sourcePath = path.join(hostDir, 'main.js');
 
-  fs.writeFileSync(sourcePath, sourceCode, { encoding: 'utf8', mode: 0o400 });
+    fs.writeFileSync(sourcePath, sourceCode, { encoding: 'utf8', mode: 0o400 });
 
-  const args = [
-    'run', '--rm', '--name', jobId,
-    '--network', DOCKER_NETWORK,
-    '--memory', MAX_MEMORY,
-    '--cpus', MAX_CPUS,
-    '--pids-limit', MAX_PIDS,
-    '--read-only',
-    '--cap-drop', 'ALL',
-    '--security-opt', 'no-new-privileges:true',
-    '--tmpfs', '/tmp:rw,noexec,nosuid,size=32m',
-    '--user', '1000:1000',
-    '--workdir', '/workspace',
-    '--mount', `type=bind,src=${hostDir},dst=/workspace,readonly`,
-    IMAGE,
-    'node', '/workspace/main.js',
-  ];
+    const args = [
+      'run',
+      '--rm',
+      '--name',
+      jobId,
+      '--network',
+      DOCKER_NETWORK,
+      '--memory',
+      MAX_MEMORY,
+      '--cpus',
+      MAX_CPUS,
+      '--pids-limit',
+      MAX_PIDS,
+      '--read-only',
+      '--cap-drop',
+      'ALL',
+      '--security-opt',
+      'no-new-privileges:true',
+      '--tmpfs',
+      '/tmp:rw,noexec,nosuid,size=32m',
+      '--user',
+      '1000:1000',
+      '--workdir',
+      '/workspace',
+      '--mount',
+      `type=bind,src=${hostDir},dst=/workspace,readonly`,
+      IMAGE,
+      'node',
+      '/workspace/main.js',
+    ];
 
-  const stdout = { value: '' };
-  const stderr = { value: '' };
-  let overflow = false;
-  let settled = false;
-  const start = Date.now();
+    const stdout = { value: '' };
+    const stderr = { value: '' };
+    let overflow = false;
+    let settled = false;
+    const start = Date.now();
 
-  const cleanup = async () => {
-    try { await fs.promises.rm(hostDir, { recursive: true, force: true }); } catch {}
-  };
+    const cleanup = async () => {
+      try {
+        await fs.promises.rm(hostDir, { recursive: true, force: true });
+      } catch {
+        // Ephemeral workspace directory cleanup is best-effort.
+      }
+    };
 
-  const finish = async (payload) => {
-    if (settled) return;
-    settled = true;
-    await cleanup();
-    resolve(payload);
-  };
+    const finish = async (payload) => {
+      if (settled) return;
+      settled = true;
+      await cleanup();
+      resolve(payload);
+    };
 
-  const child = spawn('docker', args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { PATH: process.env.PATH || '/usr/bin:/bin' },
-  });
-
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    try { spawn('docker', ['kill', jobId]); } catch {}
-    try { child.kill('SIGKILL'); } catch {}
-  }, EXECUTION_TIMEOUT_MS);
-
-  child.stdout.on('data', (chunk) => {
-    overflow = appendBounded(stdout, chunk) || overflow;
-  });
-  child.stderr.on('data', (chunk) => {
-    overflow = appendBounded(stderr, chunk) || overflow;
-  });
-
-  child.on('error', async (error) => {
-    clearTimeout(timeout);
-    await finish({
-      stdout: stdout.value,
-      stderr: error.message,
-      output: stdout.value,
-      status: 'worker_error',
-      statusCode: 500, // HTTP style
-      time: `${((Date.now() - start) / 1000).toFixed(3)}s`,
-      exitCode: 1,
-      signal: null,
+    const child = spawn('docker', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { PATH: process.env.PATH || '/usr/bin:/bin' },
     });
-  });
 
-  child.on('close', async (code, signal) => {
-    clearTimeout(timeout);
-    const isTimeout = timedOut || (Date.now() - start >= EXECUTION_TIMEOUT_MS);
-    const outputError = overflow ? `Output exceeded ${MAX_OUTPUT_BYTES} bytes.` : '';
-    await finish({
-      stdout: stdout.value,
-      stderr: [stderr.value, outputError].filter(Boolean).join('\n'),
-      output: stdout.value,
-      status: isTimeout ? 'time_limit_exceeded' : code === 0 ? 'success' : 'runtime_error',
-      // statusCode is Judge0 compatible
-      statusCode: isTimeout ? 5 : code === 0 ? 3 : 8,
-      time: `${(Math.min(Date.now() - start, EXECUTION_TIMEOUT_MS) / 1000).toFixed(3)}s`,
-      exitCode: code,
-      signal: signal || (isTimeout ? 'SIGKILL' : null),
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      try {
+        spawn('docker', ['kill', jobId]);
+      } catch {
+        // Container may already have exited.
+      }
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // Child process may already have exited.
+      }
+    }, EXECUTION_TIMEOUT_MS);
+
+    child.stdout.on('data', (chunk) => {
+      overflow = appendBounded(stdout, chunk) || overflow;
     });
-  });
+    child.stderr.on('data', (chunk) => {
+      overflow = appendBounded(stderr, chunk) || overflow;
+    });
 
-  if (stdin) child.stdin.write(stdin);
-  child.stdin.end();
-});
+    child.on('error', async (error) => {
+      clearTimeout(timeout);
+      await finish({
+        stdout: stdout.value,
+        stderr: error.message,
+        output: stdout.value,
+        status: 'worker_error',
+        statusCode: 500, // HTTP style
+        time: `${((Date.now() - start) / 1000).toFixed(3)}s`,
+        exitCode: 1,
+        signal: null,
+      });
+    });
+
+    child.on('close', async (code, signal) => {
+      clearTimeout(timeout);
+      const isTimeout = timedOut || Date.now() - start >= EXECUTION_TIMEOUT_MS;
+      const outputError = overflow ? `Output exceeded ${MAX_OUTPUT_BYTES} bytes.` : '';
+      await finish({
+        stdout: stdout.value,
+        stderr: [stderr.value, outputError].filter(Boolean).join('\n'),
+        output: stdout.value,
+        status: isTimeout ? 'time_limit_exceeded' : code === 0 ? 'success' : 'runtime_error',
+        // statusCode is Judge0 compatible
+        statusCode: isTimeout ? 5 : code === 0 ? 3 : 8,
+        time: `${(Math.min(Date.now() - start, EXECUTION_TIMEOUT_MS) / 1000).toFixed(3)}s`,
+        exitCode: code,
+        signal: signal || (isTimeout ? 'SIGKILL' : null),
+      });
+    });
+
+    if (child.stdin) {
+      child.stdin.on('error', () => {});
+      if (stdin) child.stdin.write(stdin);
+      child.stdin.end();
+    }
+  });
 
 app.post('/execute', authenticate, async (req, res) => {
-  const start = Date.now();
   try {
     const { sourceCode, language, stdin = '' } = req.body || {};
     if (language !== 'javascript') {
-      return res.status(400).json({ error: 'The isolated worker currently supports JavaScript only.' });
+      return res
+        .status(400)
+        .json({ error: 'The isolated worker currently supports JavaScript only.' });
     }
-    if (typeof sourceCode !== 'string') return res.status(400).json({ error: 'sourceCode must be a string.' });
-    if (Buffer.byteLength(sourceCode, 'utf8') > MAX_SOURCE_BYTES) return res.status(400).json({ error: 'Source code is too large.' });
-    if (typeof stdin !== 'string' || Buffer.byteLength(stdin, 'utf8') > MAX_OUTPUT_BYTES) return res.status(400).json({ error: 'stdin is invalid or too large.' });
+    if (typeof sourceCode !== 'string') {
+      return res.status(400).json({ error: 'sourceCode must be a string.' });
+    }
+    if (Buffer.byteLength(sourceCode, 'utf8') > MAX_SOURCE_BYTES) {
+      return res.status(400).json({ error: 'Source code is too large.' });
+    }
+    if (typeof stdin !== 'string' || Buffer.byteLength(stdin, 'utf8') > MAX_OUTPUT_BYTES) {
+      return res.status(400).json({ error: 'stdin is invalid or too large.' });
+    }
 
     const result = await runDocker({ sourceCode, stdin });
-    console.log(`[Execute] ${language} - ${Buffer.byteLength(sourceCode, 'utf8')} bytes - ${result.status} - ${result.time}`);
+    console.log(
+      `[Execute] ${language} - ${Buffer.byteLength(sourceCode, 'utf8')} bytes - ${result.status} - ${result.time}`
+    );
     return res.json({ result });
   } catch (error) {
     console.error(`[Execute] Error: ${error.message}`);
@@ -169,7 +210,10 @@ const server = app.listen(PORT, () => {
   console.log(`PairPad execution worker listening on ${PORT}`);
 });
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully.');
+const shutdown = (signal) => {
+  console.log(`${signal} received. Shutting down gracefully.`);
   server.close(() => process.exit(0));
-});
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

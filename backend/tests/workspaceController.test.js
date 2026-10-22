@@ -1,17 +1,22 @@
+jest.mock('../src/services/workspaceFileService');
+jest.mock('../src/utils/roomAccess');
+jest.mock('../src/utils/apiResponse');
+
 const { getFiles, create, rename, remove } = require('../src/controllers/workspaceController');
 const workspaceFileService = require('../src/services/workspaceFileService');
 const roomAccess = require('../src/utils/roomAccess');
 const apiResponse = require('../src/utils/apiResponse');
 
-jest.mock('../src/services/workspaceFileService');
-jest.mock('../src/utils/roomAccess');
-jest.mock('../src/utils/apiResponse');
-
 describe('workspaceController', () => {
   let req, res;
   beforeEach(() => {
     jest.clearAllMocks();
-    req = { params: { roomCode: 'ROOM12' }, body: {}, user: { _id: 'user123' }, app: { get: jest.fn().mockReturnValue({ to: jest.fn().mockReturnValue({ emit: jest.fn() }) }) } };
+    req = {
+      params: { roomCode: 'ROOM12' },
+      body: {},
+      user: { _id: 'user123' },
+      app: { get: jest.fn().mockReturnValue({ to: jest.fn().mockReturnValue({ emit: jest.fn() }) }) },
+    };
     res = {};
     apiResponse.sendSuccess.mockImplementation(() => ({}));
     apiResponse.sendError.mockImplementation(() => ({}));
@@ -47,13 +52,14 @@ describe('workspaceController', () => {
     req.params.fileId = null;
     await rename(req, res);
   });
-  
+
   it('deletes file', async () => {
     req.params.fileId = '1';
-    workspaceFileService.deleteFile.mockResolvedValue(true);
+    workspaceFileService.deleteFile.mockResolvedValue({ _id: '1' });
     await remove(req, res);
     expect(apiResponse.sendSuccess).toHaveBeenCalled();
     workspaceFileService.deleteFile.mockResolvedValue(false);
     await remove(req, res);
+    expect(apiResponse.sendError).toHaveBeenCalledWith(res, 404, 'File not found.');
   });
 });

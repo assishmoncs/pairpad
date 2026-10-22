@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
+import socketService from '../services/socketService';
 import './RevisionHistoryPanel.css';
 
 const buildLineDiff = (fromText, toText) => {
@@ -19,7 +20,7 @@ const buildLineDiff = (fromText, toText) => {
   return rows;
 };
 
-const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
+const RevisionHistoryPanel = ({ roomCode, code, language, currentRole, activeFileId = null }) => {
   const [revisions, setRevisions] = useState([]);
   const [selectedRevision, setSelectedRevision] = useState(null);
   const [diff, setDiff] = useState(null);
@@ -45,6 +46,13 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
     loadHistory();
   }, [loadHistory]);
 
+  useEffect(() => {
+    const unsubscribe = socketService.on('document-restored', () => {
+      void loadHistory();
+    });
+    return () => unsubscribe();
+  }, [loadHistory]);
+
   const createCheckpoint = async () => {
     try {
       setError('');
@@ -52,6 +60,7 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
         content: code,
         language,
         message: message.trim() || 'Manual checkpoint',
+        ...(activeFileId ? { fileId: activeFileId } : {}),
       });
       setMessage('');
       await loadHistory();
@@ -83,7 +92,10 @@ const RevisionHistoryPanel = ({ roomCode, code, language, currentRole }) => {
     setRestoring(true);
     setError('');
     try {
-      await axios.post(`/api/rooms/${roomCode}/history/${revision._id}/restore`);
+      await axios.post(
+        `/api/rooms/${roomCode}/history/${revision._id}/restore`,
+        activeFileId ? { fileId: activeFileId } : {}
+      );
       setSelectedRevision(null);
       setDiff(null);
       await loadHistory();

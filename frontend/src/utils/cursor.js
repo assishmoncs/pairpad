@@ -51,11 +51,18 @@ export const normalizeCursorSelection = (selection) => {
   };
 };
 
+export const cursorPaletteKeys = CURSOR_PALETTE.map((_, index) => index);
+export const cursorColorByKey = (key) => CURSOR_PALETTE[key] || CURSOR_PALETTE[0];
+
 export const buildCursorDecoration = ({ cursor, editorLineCount }) => {
   if (!cursor) return null;
   const position = normalizeCursorPosition(cursor.position);
   if (!position || position.line > editorLineCount) return null;
   const selection = normalizeCursorSelection(cursor.selection);
+  const colorKey =
+    cursor.colorKey !== undefined ? cursor.colorKey : cursorColorKeyForUser(cursor.userId || '');
+  const color = cursor.color || cursorColorByKey(colorKey);
+  const displayName = cursor.name || cursor.userName || 'Collaborator';
   const range = selection || {
     startLineNumber: position.line,
     startColumn: position.column,
@@ -66,13 +73,10 @@ export const buildCursorDecoration = ({ cursor, editorLineCount }) => {
     range,
     options: {
       isWholeLine: Boolean(selection),
-      className: `remote-cursor remote-cursor-${cursor.colorKey}`,
-      beforeContentClassName: `remote-cursor-caret remote-cursor-${cursor.colorKey}`,
-      hoverMessage: { value: `**${cursor.name || 'Collaborator'}**` },
-      overviewRuler: { color: cursor.color, position: 2 },
+      className: `remote-cursor remote-cursor-${colorKey}`,
+      beforeContentClassName: `remote-cursor-caret remote-cursor-${colorKey}`,
+      hoverMessage: { value: `**${displayName}**` },
+      overviewRuler: { color, position: 2 },
     },
   };
 };
-
-export const cursorPaletteKeys = CURSOR_PALETTE.map((_, index) => index);
-export const cursorColorByKey = (key) => CURSOR_PALETTE[key] || CURSOR_PALETTE[0];

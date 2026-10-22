@@ -1,26 +1,45 @@
-const { register, login, getMe, refreshAccessToken, logout, logoutAll, getRefreshCookieName } = require('../src/controllers/authSessionController');
-const User = require('../src/models/User');
-const sessionTokens = require('../src/utils/sessionTokens');
-const refreshSessionService = require('../src/services/refreshSessionService');
-const apiResponse = require('../src/utils/apiResponse');
-
 jest.mock('../src/models/User');
 jest.mock('../src/utils/sessionTokens');
 jest.mock('../src/services/refreshSessionService');
 jest.mock('../src/utils/apiResponse');
 
+const {
+  register,
+  login,
+  getMe,
+  refreshAccessToken,
+  logout,
+  logoutAll,
+  getRefreshCookieName,
+  parseCookies,
+} = require('../src/controllers/authSessionController');
+const User = require('../src/models/User');
+const sessionTokens = require('../src/utils/sessionTokens');
+const refreshSessionService = require('../src/services/refreshSessionService');
+const apiResponse = require('../src/utils/apiResponse');
+
 describe('authSessionController', () => {
   let req, res;
   beforeEach(() => {
     jest.clearAllMocks();
-    req = { body: {}, headers: {}, user: { _id: 'user123', toJSON: () => ({ id: 'user123' }) } };
+    req = {
+      body: {},
+      headers: {},
+      user: { _id: 'user123', toJSON: () => ({ id: 'user123' }) },
+    };
     res = { cookie: jest.fn(), clearCookie: jest.fn() };
     apiResponse.sendSuccess.mockImplementation((_r, _m, _d, _s) => ({ success: true }));
     apiResponse.sendError.mockImplementation((_r, _s, _m) => ({ error: true }));
     apiResponse.sendValidationError.mockImplementation(() => ({ error: true }));
     sessionTokens.generateAccessToken.mockReturnValue('access123');
     refreshSessionService.issueSession.mockResolvedValue({ refreshToken: 'refresh123' });
-    User.findOne.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: 'user123', toJSON: () => ({}), comparePassword: jest.fn().mockResolvedValue(true) }) });
+    User.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue({
+        _id: 'user123',
+        toJSON: () => ({}),
+        comparePassword: jest.fn().mockResolvedValue(true),
+      }),
+    });
     User.create.mockResolvedValue({ _id: 'user123', toJSON: () => ({}) });
   });
 
@@ -45,8 +64,9 @@ describe('authSessionController', () => {
     expect(res.cookie).toHaveBeenCalledWith(getRefreshCookieName(), 'newRefresh', expect.any(Object));
   });
 
-  it('logs out', async () => {
-    req.headers.cookie = getRefreshCookieName() + '=refresh123';
+  it('logs out and handles malformed percent-encoded cookies safely', async () => {
+    req.headers.cookie = `${getRefreshCookieName()}=refresh123; bad=%E0%A4%A`;
+    expect(parseCookies(req.headers.cookie).bad).toBe('%E0%A4%A');
     await logout(req, res);
     expect(refreshSessionService.revokeToken).toHaveBeenCalledWith('refresh123');
     expect(res.clearCookie).toHaveBeenCalled();

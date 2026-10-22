@@ -117,7 +117,7 @@ const Register = () => {
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                 style={{
                   background: 'none',
                   border: 'none',

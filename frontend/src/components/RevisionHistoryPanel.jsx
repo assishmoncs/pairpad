@@ -20,7 +20,7 @@ const buildLineDiff = (fromText, toText) => {
   return rows;
 };
 
-const RevisionHistoryPanel = ({ roomCode, code, language, currentRole, activeFileId = null }) => {
+const RevisionHistoryPanel = ({ roomCode, code, language, currentRole, activeFileId }) => {
   const [revisions, setRevisions] = useState([]);
   const [selectedRevision, setSelectedRevision] = useState(null);
   const [diff, setDiff] = useState(null);

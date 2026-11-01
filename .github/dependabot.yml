@@ -7,6 +7,11 @@ updates:
     open-pull-requests-limit: 5
   - package-ecosystem: npm
     directory: /frontend
+    groups:
+      react:
+        patterns: [react, react-dom]
+      vitest:
+        patterns: [vitest, '@vitest/*']
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

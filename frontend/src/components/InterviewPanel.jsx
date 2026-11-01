@@ -206,61 +206,65 @@ const InterviewPanel = ({ roomCode, room, currentRole, code, language, onRoomUpd
         </div>
       )}
 
-      {isOwner && interview && (
+      {isOwner && (interview || showConfig) && (
         <div className="interview-owner-controls">
-          <div className="interview-summary">
-            <strong>{interview.title}</strong>
-            <span>
-              {candidateName} · {interview.durationMinutes} min
-            </span>
-          </div>
-          <div className="interview-actions">
-            {interview.status === 'draft' && (
-              <button
-                type="button"
-                className="btn-interview-primary"
-                onClick={() => transition('start')}
-              >
-                Start
-              </button>
-            )}
-            {interview.status === 'running' && (
-              <button
-                type="button"
-                className="btn-interview-secondary"
-                onClick={() => transition('pause')}
-              >
-                Pause
-              </button>
-            )}
-            {interview.status === 'paused' && (
-              <button
-                type="button"
-                className="btn-interview-primary"
-                onClick={() => transition('resume')}
-              >
-                Resume
-              </button>
-            )}
-            {['running', 'paused'].includes(interview.status) && (
-              <button
-                type="button"
-                className="btn-interview-danger"
-                onClick={() => transition('end')}
-              >
-                End
-              </button>
-            )}
-            {interview.status !== 'running' && interview.status !== 'paused' && (
-              <button
-                type="button"
-                className="btn-interview-secondary"
-                onClick={() => setShowConfig((value) => !value)}
-              >
-                Configure
-              </button>
-            )}
-          </div>
+          {interview && (
+            <>
+              <div className="interview-summary">
+                <strong>{interview.title}</strong>
+                <span>
+                  {candidateName} · {interview.durationMinutes} min
+                </span>
+              </div>
+              <div className="interview-actions">
+                {interview.status === 'draft' && (
+                  <button
+                    type="button"
+                    className="btn-interview-primary"
+                    onClick={() => transition('start')}
+                  >
+                    Start
+                  </button>
+                )}
+                {interview.status === 'running' && (
+                  <button
+                    type="button"
+                    className="btn-interview-secondary"
+                    onClick={() => transition('pause')}
+                  >
+                    Pause
+                  </button>
+                )}
+                {interview.status === 'paused' && (
+                  <button
+                    type="button"
+                    className="btn-interview-primary"
+                    onClick={() => transition('resume')}
+                  >
+                    Resume
+                  </button>
+                )}
+                {['running', 'paused'].includes(interview.status) && (
+                  <button
+                    type="button"
+                    className="btn-interview-danger"
+                    onClick={() => transition('end')}
+                  >
+                    End
+                  </button>
+                )}
+                {interview.status !== 'running' && interview.status !== 'paused' && (
+                  <button
+                    type="button"
+                    className="btn-interview-secondary"
+                    onClick={() => setShowConfig((value) => !value)}
+                  >
+                    Configure
+                  </button>
+                )}
+              </div>
+            </>
+          )}
           {showConfig && (
             <form className="interview-form" onSubmit={saveConfig}>
               <label>

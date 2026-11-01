@@ -90,6 +90,7 @@ export const AuthProvider = ({ children }) => {
         const originalRequest = error.config;
         if (
           error.response?.status !== 401 ||
+          !originalRequest ||
           originalRequest?._retry ||
           originalRequest?.url?.includes('/api/auth/')
         )

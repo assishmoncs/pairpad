@@ -1,8 +1,5 @@
 const express = require('express');
 const crypto = require('crypto');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { spawn } = require('child_process');
 
 const app = express();
@@ -15,7 +12,24 @@ const MAX_MEMORY = process.env.EXECUTION_MEMORY || '128m';
 const MAX_CPUS = process.env.EXECUTION_CPUS || '0.5';
 const MAX_PIDS = process.env.EXECUTION_PIDS_LIMIT || '64';
 const DOCKER_NETWORK = process.env.EXECUTION_NETWORK || 'none';
-const IMAGE = process.env.EXECUTION_IMAGE || 'node:20-alpine';
+const IMAGE = process.env.EXECUTION_IMAGE || 'node:22-alpine';
+// Send the job over stdin so Docker never needs a path from the worker's host.
+const RUNNER = `
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+let payload = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { payload += chunk; });
+process.stdin.on('end', () => {
+  const { sourceCode, stdin } = JSON.parse(payload);
+  fs.writeFileSync('/tmp/main.js', sourceCode);
+  const result = spawnSync(process.execPath, ['/tmp/main.js'], {
+    input: stdin,
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
+  process.exit(result.status ?? 1);
+});
+`;
 
 if (!WORKER_TOKEN) {
   throw new Error('EXECUTION_WORKER_TOKEN is required.');
@@ -38,30 +52,20 @@ const authenticate = (req, res, next) => {
   return next();
 };
 
-app.get('/health', (_req, res) =>
-  res.json({ status: 'ok', service: 'pairpad-execution-worker' })
-);
+app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'pairpad-execution-worker' }));
 
 const appendBounded = (state, chunk) => {
-  const text = chunk.toString('utf8');
-  if (state.value.length + text.length <= MAX_OUTPUT_BYTES) {
-    state.value += text;
-    return false;
-  }
-  state.value = (state.value + text).slice(0, MAX_OUTPUT_BYTES);
-  return true;
+  const remaining = MAX_OUTPUT_BYTES - state.value.length;
+  state.value = Buffer.concat([state.value, chunk.subarray(0, remaining)]);
+  return chunk.length > remaining;
 };
 
 const runDocker = ({ sourceCode, stdin }) =>
   new Promise((resolve) => {
     const jobId = `pairpad-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
-    const hostDir = fs.mkdtempSync(path.join(os.tmpdir(), `${jobId}-`));
-    const sourcePath = path.join(hostDir, 'main.js');
-
-    fs.writeFileSync(sourcePath, sourceCode, { encoding: 'utf8', mode: 0o400 });
-
     const args = [
       'run',
+      '--interactive',
       '--rm',
       '--name',
       jobId,
@@ -83,32 +87,22 @@ const runDocker = ({ sourceCode, stdin }) =>
       '--user',
       '1000:1000',
       '--workdir',
-      '/workspace',
-      '--mount',
-      `type=bind,src=${hostDir},dst=/workspace,readonly`,
+      '/tmp',
       IMAGE,
       'node',
-      '/workspace/main.js',
+      '-e',
+      RUNNER,
     ];
 
-    const stdout = { value: '' };
-    const stderr = { value: '' };
+    const stdout = { value: Buffer.alloc(0) };
+    const stderr = { value: Buffer.alloc(0) };
     let overflow = false;
     let settled = false;
     const start = Date.now();
 
-    const cleanup = async () => {
-      try {
-        await fs.promises.rm(hostDir, { recursive: true, force: true });
-      } catch {
-        // Ephemeral workspace directory cleanup is best-effort.
-      }
-    };
-
-    const finish = async (payload) => {
+    const finish = (payload) => {
       if (settled) return;
       settled = true;
-      await cleanup();
       resolve(payload);
     };
 
@@ -121,7 +115,7 @@ const runDocker = ({ sourceCode, stdin }) =>
     const timeout = setTimeout(() => {
       timedOut = true;
       try {
-        spawn('docker', ['kill', jobId]);
+        spawn('docker', ['kill', jobId]).on('error', () => {});
       } catch {
         // Container may already have exited.
       }
@@ -142,9 +136,9 @@ const runDocker = ({ sourceCode, stdin }) =>
     child.on('error', async (error) => {
       clearTimeout(timeout);
       await finish({
-        stdout: stdout.value,
+        stdout: stdout.value.toString('utf8'),
         stderr: error.message,
-        output: stdout.value,
+        output: stdout.value.toString('utf8'),
         status: 'worker_error',
         statusCode: 500, // HTTP style
         time: `${((Date.now() - start) / 1000).toFixed(3)}s`,
@@ -158,9 +152,9 @@ const runDocker = ({ sourceCode, stdin }) =>
       const isTimeout = timedOut || Date.now() - start >= EXECUTION_TIMEOUT_MS;
       const outputError = overflow ? `Output exceeded ${MAX_OUTPUT_BYTES} bytes.` : '';
       await finish({
-        stdout: stdout.value,
-        stderr: [stderr.value, outputError].filter(Boolean).join('\n'),
-        output: stdout.value,
+        stdout: stdout.value.toString('utf8'),
+        stderr: [stderr.value.toString('utf8'), outputError].filter(Boolean).join('\n'),
+        output: stdout.value.toString('utf8'),
         status: isTimeout ? 'time_limit_exceeded' : code === 0 ? 'success' : 'runtime_error',
         // statusCode is Judge0 compatible
         statusCode: isTimeout ? 5 : code === 0 ? 3 : 8,
@@ -172,8 +166,7 @@ const runDocker = ({ sourceCode, stdin }) =>
 
     if (child.stdin) {
       child.stdin.on('error', () => {});
-      if (stdin) child.stdin.write(stdin);
-      child.stdin.end();
+      child.stdin.end(JSON.stringify({ sourceCode, stdin }));
     }
   });
 
@@ -181,9 +174,9 @@ app.post('/execute', authenticate, async (req, res) => {
   try {
     const { sourceCode, language, stdin = '' } = req.body || {};
     if (language !== 'javascript') {
-      return res
-        .status(400)
-        .json({ error: 'The isolated worker currently supports JavaScript only.' });
+      return res.status(400).json({
+        error: 'The isolated worker currently supports JavaScript only.',
+      });
     }
     if (typeof sourceCode !== 'string') {
       return res.status(400).json({ error: 'sourceCode must be a string.' });
@@ -206,14 +199,18 @@ app.post('/execute', authenticate, async (req, res) => {
   }
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`PairPad execution worker listening on ${PORT}`);
-});
+if (require.main === module) {
+  const server = app.listen(PORT, () => {
+    console.log(`PairPad execution worker listening on ${PORT}`);
+  });
 
-const shutdown = (signal) => {
-  console.log(`${signal} received. Shutting down gracefully.`);
-  server.close(() => process.exit(0));
-};
+  const shutdown = (signal) => {
+    console.log(`${signal} received. Shutting down gracefully.`);
+    server.close(() => process.exit(0));
+  };
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+module.exports = app;

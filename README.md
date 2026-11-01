@@ -4,7 +4,7 @@
 
 **Real-time collaborative coding for pair programming, technical interviews, and shared code execution.**
 
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Node.js](https://img.shields.io/badge/Node.js-22.22.2%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-4.x-010101?logo=socket.io)](https://socket.io)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20%2F%20Local-47A248?logo=mongodb&logoColor=white)](https://mongodb.com)
@@ -53,7 +53,7 @@ PairPad includes automated browser checks for accessible names, form labels, ima
 | Layer | Technologies |
 |---|---|
 | **Frontend** | React 19, Vite, React Router v7, Axios, Socket.IO Client, Monaco Editor |
-| **Backend** | Node.js 18+, Express 5, Socket.IO 4, MongoDB + Mongoose 9, JWT, bcryptjs, express-rate-limit, Helmet, Redis adapter |
+| **Backend** | Node.js 22.22.2+, Express 5, Socket.IO 4, MongoDB + Mongoose 9, JWT, bcryptjs, express-rate-limit, Helmet, Redis adapter |
 | **Collaboration** | Dependency-free sequence CRDT over authenticated Socket.IO transport |
 | **Code Execution** | Judge0 CE + optional isolated execution worker |
 | **Testing** | Jest + Supertest · Vitest + Testing Library · Playwright |
@@ -67,6 +67,8 @@ cd pairpad
 ```
 
 ### Backend
+
+Use Node.js 22.22.2+ or Node.js 24.15.0+; `.nvmrc` selects a compatible Node.js 22 release.
 
 ```bash
 cd backend

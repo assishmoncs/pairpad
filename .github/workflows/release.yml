@@ -83,6 +83,12 @@ jobs:
       - name: Frontend build and budget
         working-directory: frontend
         run: npm run perf
+      - name: Install execution worker
+        working-directory: execution-worker
+        run: npm ci
+      - name: Execution worker tests
+        working-directory: execution-worker
+        run: npm test
 
   images:
     name: Build and publish images
@@ -115,7 +121,8 @@ jobs:
             type=sha
       - uses: docker/build-push-action@v7
         with:
-          context: ./backend
+          context: .
+          file: backend/Dockerfile
           push: true
           tags: ${{ steps.backend_meta.outputs.tags }}
           labels: ${{ steps.backend_meta.outputs.labels }}
@@ -160,6 +167,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Validate Compose configuration
+        env:
+          JWT_SECRET: compose-validation-only
+          EXECUTION_WORKER_TOKEN: compose-validation-only
         run: docker compose config
       - name: Record release provenance
         run: |

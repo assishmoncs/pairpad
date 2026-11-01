@@ -155,16 +155,24 @@ export const useCrdtCollaboration = ({
     };
 
     let cleanupSocket = () => {};
+    const handleDisconnect = () => {
+      initializedRef.current = false;
+      pendingOperationsRef.current = [];
+      setCrdtReady(false);
+    };
     const handleConnect = () => {
+      handleDisconnect();
       cleanupSocket();
       cleanupSocket = attachSocketListeners();
     };
 
     const unsubscribeConnect = socketService.on('connect', handleConnect);
+    const unsubscribeDisconnect = socketService.on('disconnect', handleDisconnect);
     if (socketService.isConnected()) cleanupSocket = attachSocketListeners();
 
     return () => {
       unsubscribeConnect();
+      unsubscribeDisconnect();
       cleanupSocket();
       initializedRef.current = false;
       pendingOperationsRef.current = [];

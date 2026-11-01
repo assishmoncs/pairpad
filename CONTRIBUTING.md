@@ -4,7 +4,7 @@ Thanks for contributing. PairPad is a real-time collaborative coding platform, s
 
 ## Development setup
 
-1. Install Node.js 18+ and MongoDB.
+1. Install Node.js 22.22.2+ (or Node.js 24.15.0+) and MongoDB. `.nvmrc` selects a compatible Node.js 22 release.
 2. Copy `backend/.env.example` to `backend/.env` and configure the required values.
 3. Run the backend with `npm run dev` from `backend/`.
 4. Run the frontend with `npm run dev` from `frontend/`.

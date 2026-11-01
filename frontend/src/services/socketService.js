@@ -58,6 +58,8 @@ class SocketService {
     });
     this.socket.on('disconnect', (reason) => {
       this.connected = false;
+      this.currentRoom = null;
+      this.joinRoomPromise = null;
       this.emitEvent('disconnect', { reason });
     });
     this.socket.on('connect_error', (error) => {

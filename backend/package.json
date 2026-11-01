@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "main": "src/server.js",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "overrides": {
+    "glob": "^14.0.3",
+    "minimatch": "^11.0.3"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",

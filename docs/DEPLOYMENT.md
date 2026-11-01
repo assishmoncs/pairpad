@@ -6,7 +6,7 @@ This guide covers reproducible local deployment and production deployment of the
 
 For manual deployment:
 
-- Node.js 20+ (18+ supported)
+- Node.js 22.22.2+ or 24.15.0+ (see `.nvmrc`)
 - MongoDB (local, Atlas, or managed)
 - Judge0 CE — self-hosted or RapidAPI for production code execution
 
@@ -21,8 +21,11 @@ The repository now includes a Docker Compose stack for the application, MongoDB,
 
 ```bash
 export JWT_SECRET="$(node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")"
+export EXECUTION_WORKER_TOKEN="$(node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")"
 docker compose up --build
 ```
+
+To build only the backend image, run `docker build -f backend/Dockerfile .` from the repository root so the OpenAPI contract is included.
 
 Open `http://localhost` after the frontend health check passes.
 

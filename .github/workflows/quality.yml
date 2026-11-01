@@ -15,6 +15,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  execution-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: execution-worker
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: execution-worker/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --omit=dev
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -56,6 +73,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm audit --omit=dev
       - name: Run backend tests
         run: npm test -- --json --outputFile=backend-test-results.json
       - name: Upload backend test report
@@ -80,6 +98,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm audit --omit=dev
       - run: npm run format:check
       - run: npm test
       - run: npm run build

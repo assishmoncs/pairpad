@@ -32,6 +32,15 @@ describe('AuthContext', () => {
     vi.clearAllMocks();
   });
 
+  it('preserves a 401 error when Axios did not provide a request config', async () => {
+    const error = Object.assign(new Error('Unauthorized'), { response: { status: 401 } });
+    axios.post.mockRejectedValue(error);
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('unauthenticated'));
+    const rejectResponse = axios.interceptors.response.use.mock.calls[0][1];
+    await expect(rejectResponse(error)).rejects.toBe(error);
+  });
+
   it('is unauthenticated when refresh fails', async () => {
     const error = new Error('Unauthorized');
     error.response = { status: 401 };

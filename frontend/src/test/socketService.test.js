@@ -90,4 +90,15 @@ describe('socketService lifecycle', () => {
     expect(socketService.getCurrentRoom()).toBeNull();
     expect(socket.disconnect).toHaveBeenCalled();
   });
+  it('clears room membership after a transport disconnect', async () => {
+    const socket = socketService.connect('access-token');
+    socket.connected = true;
+    socket.fire('connect');
+    await socketService.joinRoom('ABC123');
+
+    socket.connected = false;
+    socket.fire('disconnect', 'transport close');
+
+    expect(socketService.getCurrentRoom()).toBeNull();
+  });
 });

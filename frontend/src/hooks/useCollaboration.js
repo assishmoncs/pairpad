@@ -21,6 +21,7 @@ export const useCollaboration = ({
   const [remoteCursors, setRemoteCursors] = useState(new Map());
   const socketCleanupRef = useRef(() => {});
   const cursorExpiryTimersRef = useRef(new Map());
+  const hasRoom = Boolean(room);
 
   const clearRemoteCursors = useCallback(() => {
     cursorExpiryTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -59,12 +60,33 @@ export const useCollaboration = ({
     setReconnecting(true);
     setSocketError('');
 
-    const unsubConnect = socketService.on('connect', () => {
-      if (isMountedRef.current) {
-        setConnected(true);
-        setReconnecting(false);
-      }
-    });
+    let cancelled = false;
+    let joinPromise = null;
+    const joinCurrentRoom = () => {
+      if (cancelled || !isMountedRef.current) return Promise.resolve();
+      if (joinPromise) return joinPromise;
+      joinPromise = (async () => {
+        try {
+          const response = await socketService.joinRoom(roomCode);
+          if (cancelled || !isMountedRef.current) return;
+          setConnected(true);
+          setReconnecting(false);
+          setSocketError('');
+          if (response.users) setOnlineUsers(response.users);
+          if (response.role) callbacksRef.current.onRoleUpdated?.(response.role);
+          await callbacksRef.current.fetchMessages?.();
+        } catch {
+          if (cancelled || !isMountedRef.current) return;
+          setConnected(false);
+          setSocketError('Could not connect to collaboration server. Retrying…');
+          setReconnecting(true);
+        } finally {
+          joinPromise = null;
+        }
+      })();
+      return joinPromise;
+    };
+    const unsubConnect = socketService.on('connect', () => void joinCurrentRoom());
     const unsubDisconnect = socketService.on('disconnect', () => {
       if (isMountedRef.current) {
         setConnected(false);
@@ -125,6 +147,7 @@ export const useCollaboration = ({
     );
 
     socketCleanupRef.current = () => {
+      cancelled = true;
       [
         unsubConnect,
         unsubDisconnect,
@@ -143,14 +166,11 @@ export const useCollaboration = ({
     try {
       socketService.connect(token);
       await socketService.waitForConnection();
-      if (!isMountedRef.current) return;
-      setConnected(true);
-      const response = await socketService.joinRoom(roomCode);
-      if (isMountedRef.current && response.users) setOnlineUsers(response.users);
-      if (response.role) callbacksRef.current.onRoleUpdated?.(response.role);
-      await callbacksRef.current.fetchMessages();
+      if (cancelled || !isMountedRef.current) return;
+      // The connect event may have already completed the initial join.
+      if (socketService.getCurrentRoom?.() !== roomCode.toUpperCase()) await joinCurrentRoom();
     } catch {
-      if (isMountedRef.current) {
+      if (!cancelled && isMountedRef.current) {
         setSocketError('Could not connect to collaboration server. Retrying…');
         setReconnecting(true);
       }
@@ -158,9 +178,9 @@ export const useCollaboration = ({
   }, [cleanupListeners, clearRemoteCursors, token, roomCode, isMountedRef]);
 
   useEffect(() => {
-    if (room && token) void connectToSocket();
+    if (hasRoom && token) void connectToSocket();
     return cleanupListeners;
-  }, [room, token, connectToSocket, cleanupListeners]);
+  }, [hasRoom, token, connectToSocket, cleanupListeners]);
 
   return {
     connected,

@@ -3,11 +3,12 @@ FROM node:22-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /app
 
-COPY package*.json ./
+COPY backend/package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-COPY src ./src
-COPY .env.example ./.env.example
+COPY backend/src ./src
+COPY backend/.env.example ./.env.example
+COPY docs/openapi.yaml ./docs/openapi.yaml
 
 USER node
 EXPOSE 5000
